@@ -99,17 +99,20 @@ export function initSockets(httpServer) {
         const payload = await endRoundAndScore({ salaId, roundId })
         io.to(salaId).emit('round:end', payload)
 
+        // 4) dispara próxima rodada (se houver), senão avisa match:end
         const next = await getNextRoundForSala({ salaId, afterRoundId: roundId })
         if (next) {
-          await supa.from('rodada').update({ status: 'in_progress' }).eq('rodada_id', next.rodada_id)
+          // há próxima rodada
           io.to(salaId).emit('round:ready', next)
           io.to(salaId).emit('round:started', { roundId: next.rodada_id, duration: 20 })
           scheduleRoundCountdown({ salaId, roundId: next.rodada_id, duration: 20 })
         } else {
+          // 🚨 fim da partida
           io.to(salaId).emit('match:end', {
             totais: payload.totais,
             vencedor: computeWinner(payload.totais)
           })
+          console.log(`[MATCH END] Sala ${salaId} concluída.`, payload.totais)
         }
       } catch (e) {
         console.error('[round:stop] error', e)

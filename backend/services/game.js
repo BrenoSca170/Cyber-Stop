@@ -1,7 +1,20 @@
 // backend/services/game.js
 import { supa } from './supabase.js'
 
-// ===== helpers de banco =====
+/* =========================
+   Utilidades
+========================= */
+function normalize(txt = '') {
+  return String(txt)
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // remove acentos
+}
+
+/* =========================
+   Helpers de banco
+========================= */
 async function getJogadoresDaSala(salaId) {
   const sId = Number(salaId)
 
@@ -40,7 +53,7 @@ async function getRoundCore(rodadaId) {
 
   const qLetra = await supa
     .from('letra')
-    .select('letra_caractere')
+    .select('letra_id, letra_caractere')
     .eq('letra_id', r.data.letra_id)
     .maybeSingle()
   if (qLetra.error) throw qLetra.error
@@ -48,6 +61,7 @@ async function getRoundCore(rodadaId) {
   return {
     rodada_id: r.data.rodada_id,
     sala_id: r.data.sala_id,
+    letra_id: qLetra.data?.letra_id,
     letra: qLetra.data?.letra_caractere || ''
   }
 }
@@ -103,26 +117,23 @@ async function getRodadasFromSala(salaId) {
 export async function getNextRoundForSala({ salaId, afterRoundId }) {
   const rounds = await getRodadasFromSala(salaId)
   if (!rounds.length) return null
-  let target = null
-  if (!afterRoundId) target = rounds[0]
-  else {
-    const idx = rounds.findIndex(r => r.rodada_id === afterRoundId)
-    if (idx >= 0 && idx + 1 < rounds.length) target = rounds[idx + 1]
+
+  const idx = rounds.findIndex(r => r.rodada_id === afterRoundId)
+  if (idx === -1) {
+    // caso não encontre, retorna a primeira
+    return await buildRoundPayload(rounds[0].rodada_id)
   }
-  return target ? await buildRoundPayload(target.rodada_id) : null
+
+  const proxima = rounds[idx + 1]
+  if (!proxima) return null // 🚨 fim das rodadas
+
+  // carrega payload completo
+  return await buildRoundPayload(proxima.rodada_id)
 }
 
-// ===== SCORING =====
-function scorePair(txtA = '', txtB = '') {
-  const a = (txtA || '').trim()
-  const b = (txtB || '').trim()
-  if (!a && !b) return [0,0]
-  if (!a) return [0,10]
-  if (!b) return [10,0]
-  if (a.toLowerCase() === b.toLowerCase()) return [5,5]
-  return [10,10]
-}
-
+/* =========================
+   Scoring helpers
+========================= */
 async function ensurePlaceholders({ rodadaId, jogadores, temas }) {
   const rows = []
   for (const jog of jogadores) {
@@ -195,10 +206,32 @@ async function computeTotaisSala({ salaId }) {
 }
 
 /**
- * HARDENING: encerra rodada com **lock no banco**
- * - ganha o lock mudando status de 'ready'/'in_progress' -> 'scoring'
- * - se não ganhar, retorna estado atual (alguém já pontuou)
- * - ao final marca 'done'
+ * Carrega o dicionário (resposta_base) para a letra da rodada
+ * Retorna um mapa: { [tema_id]: Set<string_normalizada> }
+ */
+async function loadLexiconMap({ temaIds, letraId }) {
+  if (!temaIds.length) return {}
+  const { data, error } = await supa
+    .from('resposta_base')
+    .select('tema_id, texto')
+    .eq('letra_id', letraId)
+    .in('tema_id', temaIds)
+  if (error) throw error
+
+  const map = {}
+  for (const row of data || []) {
+    const t = Number(row.tema_id)
+    if (!map[t]) map[t] = new Set()
+    map[t].add(normalize(row.texto))
+  }
+  return map
+}
+
+/* =========================
+   SCORING (com dicionário)
+========================= */
+/**
+ * HARDENING: encerra rodada com lock e pontua com base no dicionário
  */
 export async function endRoundAndScore({ salaId, roundId }) {
   // 🔒 tenta ganhar o "lock"
@@ -227,24 +260,59 @@ export async function endRoundAndScore({ salaId, roundId }) {
     jogadores = [...new Set([...jogadores, ...distinct])].sort((a,b)=>a-b)
   }
 
-  const temas = await getTemasDaRodada(roundId)
+  const temas = await getTemasDaRodada(roundId) // [{tema_id, tema_nome}]
   await ensurePlaceholders({ rodadaId: roundId, jogadores, temas })
 
   const respostas = await loadRespostasRodada({ rodadaId: roundId, jogadores, temas })
 
+  // pega letra da rodada uma única vez
+  const core = await getRoundCore(roundId)
+  const letraId = core?.letra_id
+  const letraChar = core?.letra?.toUpperCase() || ''
+
+  // carrega dicionário uma única vez (por letra e temas da rodada)
+  const temaIds = temas.map(t => t.tema_id)
+  const lexicon = await loadLexiconMap({ temaIds, letraId })
+
   const roundScore = {}
   const aId = jogadores[0]
   const bId = jogadores[1]
+
   for (const t of temas) {
-    const aTxt = respostas[t.tema_nome]?.[aId]?.resposta || ''
-    const bTxt = bId ? (respostas[t.tema_nome]?.[bId]?.resposta || '') : ''
-    const [pA, pB] = scorePair(aTxt, bTxt)
-    await savePontuacao({ rodadaId: roundId, temaNome: t.tema_nome, jogadorId: aId, pontos: pA })
+    const temaId = t.tema_id
+    const temaNome = t.tema_nome
+
+    const aTxt = respostas[temaNome]?.[aId]?.resposta || ''
+    const bTxt = bId ? (respostas[temaNome]?.[bId]?.resposta || '') : ''
+
+    const aNorm = normalize(aTxt)
+    const bNorm = normalize(bTxt)
+
+    // valida: começa com a letra e existe no dicionário (tema/letra)
+    const set = lexicon[temaId] || new Set()
+    const startsWithA = aNorm.startsWith(normalize(letraChar))
+    const startsWithB = bNorm.startsWith(normalize(letraChar))
+    const aValida = !!aNorm && startsWithA && set.has(aNorm)
+    const bValida = !!bNorm && startsWithB && set.has(bNorm)
+
+    // regra clássica: 10/5/0
+    let pA = 0, pB = 0
+    if (aValida && bValida && aNorm === bNorm) {
+      pA = pB = 5
+    } else if (aValida && bValida) {
+      pA = pB = 10
+    } else if (aValida) {
+      pA = 10; pB = 0
+    } else if (bValida) {
+      pA = 0; pB = 10
+    } // senão ambos 0
+
+    await savePontuacao({ rodadaId: roundId, temaNome, jogadorId: aId, pontos: pA })
     if (bId) {
-      await savePontuacao({ rodadaId: roundId, temaNome: t.tema_nome, jogadorId: bId, pontos: pB })
-      roundScore[t.tema_nome] = { [aId]: pA, [bId]: pB }
+      await savePontuacao({ rodadaId: roundId, temaNome, jogadorId: bId, pontos: pB })
+      roundScore[temaNome] = { [aId]: pA, [bId]: pB }
     } else {
-      roundScore[t.tema_nome] = { [aId]: pA }
+      roundScore[temaNome] = { [aId]: pA }
     }
   }
 
@@ -256,7 +324,90 @@ export async function endRoundAndScore({ salaId, roundId }) {
   return { roundId, roundScore, totais }
 }
 
-// ======= LETRAS sem repetição (usar no /matches/start) =======
+/* =========================
+   Sorteio coerente (letra com >=4 temas)
+========================= */
+export async function generateCoherentRounds({ totalRounds = 5 }) {
+  // 1) Carrega toda a resposta_base (paginando)
+  let allRows = []
+  let from = 0
+  const pageSize = 1000
+  while (true) {
+    const { data, error } = await supa
+      .from('resposta_base')
+      .select('tema_id, letra_id')
+      .range(from, from + pageSize - 1)
+    if (error) throw error
+    if (!data?.length) break
+    allRows = allRows.concat(data)
+    if (data.length < pageSize) break
+    from += pageSize
+  }
+
+  // 2) Monta mapa letra -> temas
+  const mapa = {}
+  for (const r of allRows || []) {
+    const lid = Number(r.letra_id)
+    const tid = Number(r.tema_id)
+    if (!mapa[lid]) mapa[lid] = new Set()
+    mapa[lid].add(tid)
+  }
+
+  // 3) Filtra letras com >=4 temas possíveis
+  const letrasValidas = Object.entries(mapa)
+    .filter(([_, temas]) => temas.size >= 4)
+    .map(([lid]) => Number(lid))
+
+  if (letrasValidas.length < totalRounds) {
+    throw new Error('Banco insuficiente: faltam letras com >=4 temas para gerar as rodadas.')
+  }
+
+  // 4) Embaralha e CAPA pelo totalRounds (letras sem repetição)
+  const pool = [...letrasValidas]
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[pool[i], pool[j]] = [pool[j], pool[i]]
+  }
+  const letrasEscolhidas = pool.slice(0, totalRounds)
+
+  // 5) tabelas auxiliares (nomes)
+  const { data: letrasTbl, error: eL } = await supa
+    .from('letra')
+    .select('letra_id, letra_caractere')
+  if (eL) throw eL
+
+  const { data: temasTbl, error: eT } = await supa
+    .from('tema')
+    .select('tema_id, tema_nome')
+  if (eT) throw eT
+
+  // 6) monta rounds (para cada letra escolhida, 4 temas válidos)
+  const rounds = []
+  for (const letra_id of letrasEscolhidas) {
+    const possiveis = [...(mapa[letra_id] || [])]
+    // embaralha e pega 4
+    for (let i = possiveis.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[possiveis[i], possiveis[j]] = [possiveis[j], possiveis[i]]
+    }
+    const escolhidos = possiveis.slice(0, 4)
+
+    rounds.push({
+      letra_id,
+      letra_char: letrasTbl.find(l => l.letra_id === letra_id)?.letra_caractere || '?',
+      temas: escolhidos.map(tid => ({
+        tema_id: tid,
+        tema_nome: temasTbl.find(t => t.tema_id === tid)?.tema_nome || ''
+      }))
+    })
+  }
+
+  return rounds
+}
+
+/* =========================
+   LETRAS sem repetição (fallback antigo)
+========================= */
 export function pickLettersNoRepeat({ total, blacklist = [] }) {
   const A = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').filter(ch => !blacklist.includes(ch))
   for (let i = A.length - 1; i > 0; i--) {
