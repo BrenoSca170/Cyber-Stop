@@ -1,0 +1,26 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.vscode/
+dist/
+.build/
+.cache/
+
+# Python (se usar venvs/whisper etc.)
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# System
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Opcional: manter .env no repo (pedido seu)
+# (Se quiser esconder algum segredo, troque aqui por .env* para ignorar)
+# .env
