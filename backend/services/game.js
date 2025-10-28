@@ -15,6 +15,8 @@ function normalize(txt = '') {
 /* =========================
    Helpers de banco
 ========================= */
+
+// ATUALIZADO: Remove fallback para 'participante_sala'
 async function getJogadoresDaSala(salaId) {
   const sId = Number(salaId)
 
@@ -27,19 +29,11 @@ async function getJogadoresDaSala(salaId) {
   if (js.error) throw js.error
   let ids = (js.data || []).map(r => Number(r.jogador_id)).filter(Boolean)
 
-  // B) fallback: participante_sala (se existir)
-  if (ids.length < 2) {
-    const ps = await supa
-      .from('participante_sala')
-      .select('jogador_id')
-      .eq('sala_id', sId)
-      .order('jogador_id', { ascending: true })
-    if (ps.error && ps.error.code !== 'PGRST116') throw ps.error
-    const more = (ps.data || []).map(r => Number(r.jogador_id)).filter(Boolean)
-    ids = [...new Set([...ids, ...more])]
-  }
+  // B) fallback: participante_sala (REMOVIDO)
+  
   return ids.sort((a,b) => a - b)
 }
+
 
 /** Core da rodada: sala + letra */
 async function getRoundCore(rodadaId) {
@@ -232,6 +226,7 @@ async function loadLexiconMap({ temaIds, letraId }) {
 ========================= */
 /**
  * HARDENING: encerra rodada com lock e pontua com base no dicionário
+ * ATUALIZADO: Lógica de pontuação refeita para N jogadores (em vez de apenas 2)
  */
 export async function endRoundAndScore({ salaId, roundId }) {
   // 🔒 tenta ganhar o "lock"
@@ -250,7 +245,7 @@ export async function endRoundAndScore({ salaId, roundId }) {
 
   // ==== fluxo normal de pontuação ====
   let jogadores = await getJogadoresDaSala(salaId)
-  if (jogadores.length < 2) {
+  if (jogadores.length === 0) { // Lógica de fallback se 'jogador_sala' estiver vazio mas participações existirem
     const q = await supa
       .from('participacao_rodada')
       .select('jogador_id')
@@ -275,44 +270,52 @@ export async function endRoundAndScore({ salaId, roundId }) {
   const lexicon = await loadLexiconMap({ temaIds, letraId })
 
   const roundScore = {}
-  const aId = jogadores[0]
-  const bId = jogadores[1]
+  const allJogadorIds = [...jogadores] // Lista de IDs de todos os jogadores
 
   for (const t of temas) {
     const temaId = t.tema_id
     const temaNome = t.tema_nome
-
-    const aTxt = respostas[temaNome]?.[aId]?.resposta || ''
-    const bTxt = bId ? (respostas[temaNome]?.[bId]?.resposta || '') : ''
-
-    const aNorm = normalize(aTxt)
-    const bNorm = normalize(bTxt)
-
-    // valida: começa com a letra e existe no dicionário (tema/letra)
     const set = lexicon[temaId] || new Set()
-    const startsWithA = aNorm.startsWith(normalize(letraChar))
-    const startsWithB = bNorm.startsWith(normalize(letraChar))
-    const aValida = !!aNorm && startsWithA && set.has(aNorm)
-    const bValida = !!bNorm && startsWithB && set.has(bNorm)
 
-    // regra clássica: 10/5/0
-    let pA = 0, pB = 0
-    if (aValida && bValida && aNorm === bNorm) {
-      pA = pB = 5
-    } else if (aValida && bValida) {
-      pA = pB = 10
-    } else if (aValida) {
-      pA = 10; pB = 0
-    } else if (bValida) {
-      pA = 0; pB = 10
-    } // senão ambos 0
+    const temaRespostas = {} // { jogador_id: { resposta, norm, valida, pontos } }
+    const validos = {} // { resposta_normalizada: [jogador_id1, jogador_id2] }
 
-    await savePontuacao({ rodadaId: roundId, temaNome, jogadorId: aId, pontos: pA })
-    if (bId) {
-      await savePontuacao({ rodadaId: roundId, temaNome, jogadorId: bId, pontos: pB })
-      roundScore[temaNome] = { [aId]: pA, [bId]: pB }
-    } else {
-      roundScore[temaNome] = { [aId]: pA }
+    // 1. Coletar e validar respostas de TODOS os jogadores
+    for (const jId of allJogadorIds) {
+      const resposta = respostas[temaNome]?.[jId]?.resposta || ''
+      const norm = normalize(resposta)
+      const startsWith = norm.startsWith(normalize(letraChar))
+      const valida = !!norm && startsWith && set.has(norm)
+
+      temaRespostas[jId] = { resposta, norm, valida, pontos: 0 }
+
+      if (valida) {
+        if (!validos[norm]) validos[norm] = []
+        validos[norm].push(jId)
+      }
+    }
+
+    // 2. Calcular pontos com base nas respostas válidas
+    for (const norm in validos) {
+      const jogadoresComEstaResposta = validos[norm]
+      if (jogadoresComEstaResposta.length === 1) {
+        // Resposta única = 10 pontos
+        const jId = jogadoresComEstaResposta[0]
+        temaRespostas[jId].pontos = 10
+      } else {
+        // Resposta compartilhada = 5 pontos
+        for (const jId of jogadoresComEstaResposta) {
+          temaRespostas[jId].pontos = 5
+        }
+      }
+    }
+
+    // 3. Salvar pontuação de todos e construir payload de 'roundScore'
+    roundScore[temaNome] = {}
+    for (const jId of allJogadorIds) {
+      const p = temaRespostas[jId].pontos
+      await savePontuacao({ rodadaId: roundId, temaNome, jogadorId: jId, pontos: p })
+      roundScore[temaNome][jId] = p
     }
   }
 
@@ -323,6 +326,7 @@ export async function endRoundAndScore({ salaId, roundId }) {
 
   return { roundId, roundScore, totais }
 }
+
 
 /* =========================
    Sorteio coerente (letra com >=4 temas)

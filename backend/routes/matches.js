@@ -63,14 +63,17 @@ router.post('/start', async (req, res) => {
 
     // 2) Precisa de pelo menos 2 jogadores na sala
     const qPlayersJS = await supa.from('jogador_sala').select('jogador_id').eq('sala_id', sala_id)
-    const qPlayersPS = await supa.from('participante_sala').select('jogador_id').eq('sala_id', sala_id)
+    // REMOVIDO: const qPlayersPS = await supa.from('participante_sala').select('jogador_id').eq('sala_id', sala_id)
+    
     const ids = [
       ...(qPlayersJS.data || []).map(r => Number(r.jogador_id)),
-      ...(qPlayersPS.data || []).map(r => Number(r.jogador_id)),
+      // REMOVIDO: ...(qPlayersPS.data || []).map(r => Number(r.jogador_id)),
     ]
     const unique = [...new Set(ids)].filter(Boolean)
-    if (unique.length < 2) {
-      return res.status(400).json({ error: 'A sala precisa ter exatamente 2 jogadores antes de iniciar a partida.' })
+    
+    // ATUALIZADO: Verifica se há pelo menos 2 jogadores
+    if (unique.length < 2) { 
+      return res.status(400).json({ error: 'A sala precisa ter pelo menos 2 jogadores para iniciar a partida.' })
     }
 
     // 3) Tempo configurado para as rodadas
