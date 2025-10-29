@@ -1,253 +1,136 @@
-// frontend/src/pages/GameScreen.jsx
-import { useEffect, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
-import { api } from '../lib/api'
-import socket, { joinRoom } from '../lib/socket'
-import CategoryRow from '../components/CategoryRow'
+// src/pages/GameScreen.jsx
+import { useParams } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useEffect } from 'react'; // <-- IMPORTAR useEffect
+
+// Nossos novos Hooks
+import { useGameSocket } from '../hooks/useGameSocket';
+import { useGameInput } from '../hooks/useGameInput';
+import { usePowerUps } from '../hooks/usePowerUps';
+
+// Nossos novos Componentes de UI
+import JumpscareOverlay from '../components/game/JumpscareOverlay';
+import MatchEndScreen from '../components/game/MatchEndScreen';
+import WaitingForRound from '../components/game/WaitingForRound';
+import ActiveRound from '../components/game/ActiveRound';
 
 export default function GameScreen() {
-  const { salaId } = useParams()
+  const { salaId } = useParams();
   const meuJogadorId = Number(
     localStorage.getItem('meuJogadorId') ||
     sessionStorage.getItem('meuJogadorId') ||
     '0'
-  )
+  );
 
-  const [rodadaId, setRodadaId] = useState(null)
-  const [letra, setLetra] = useState('')
-  const [temas, setTemas] = useState([]) // [{id,nome}]
-  const [timeLeft, setTimeLeft] = useState(null)
-  const [answers, setAnswers] = useState({}) // temaId -> texto
+  // --- HOOKS DE LÓGICA ---
+  
+  // 1. Hook de Socket: Gerencia o estado principal do jogo (CHAMADO PRIMEIRO)
+  const { 
+    socket, 
+    gameState, 
+    effectsState 
+  } = useGameSocket(salaId); // Não precisa mais da callback
+  
+  // Desestrutura o estado para passar para os outros hooks
+  const { rodadaId, isLocked, finalizado, totais, vencedor } = gameState;
+  const { activeSkipPowerUpId, setActiveSkipPowerUpId } = effectsState;
 
-  const [placarRodada, setPlacarRodada] = useState({})
-  const [totais, setTotais] = useState({})
-  const [finalizado, setFinalizado] = useState(false)
-  const [vencedor, setVencedor] = useState(null)
-  const [isLocked, setIsLocked] = useState(false)
+  // 2. Hook de Input: Passa o gameState para ele
+  const { 
+    answers, 
+    updateAnswer, 
+    skippedCategories, 
+    setSkippedCategories,
+    onStop, 
+    handleSkipCategory,
+    enviarRespostas // Pega a função para o novo useEffect
+  } = useGameInput(
+    gameState, // Passa o objeto de estado inteiro
+    salaId, 
+    meuJogadorId
+  );
 
-  // mapa de timers por temaId para debounce
-  const debounceTimers = useRef(new Map())
+  // 3. Hook de Power-ups:
+  const { 
+    inventario, 
+    loadingInventory, 
+    handleUsePowerUp,
+    fetchInventory 
+  } = usePowerUps(
+    rodadaId, 
+    isLocked
+  );
 
+  // 4. NOVO EFFECT: Lida com o 'round:stopping'
+  // Este effect observa a mudança em 'isLocked'. 
+  // Quando 'isLocked' fica 'true' E uma rodada estava ativa (rodadaId existe),
+  // ele dispara o 'enviarRespostas' que foi acionado pelo 'round:stopping'.
   useEffect(() => {
-    joinRoom(salaId)
-
-    const onReady = (data) => {
-      setRodadaId(data.rodada_id)
-      setLetra(data.letra)
-      setTemas(data.temas) // [{id,nome}]
-      setAnswers({})
-      setTimeLeft(null)
-      setIsLocked(false)
-      // limpa qualquer debounce pendente
-      for (const t of debounceTimers.current.values()) clearTimeout(t)
-      debounceTimers.current.clear()
+    // Só roda se 'isLocked' for true, e se uma rodada estava em andamento
+    if (isLocked && rodadaId && !finalizado) {
+      console.log("GameScreen detectou 'isLocked=true' (parada de rodada), enviando respostas...");
+      // Envia as respostas da rodada atual, ignorando as puladas
+      enviarRespostas(rodadaId, skippedCategories);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLocked, rodadaId, finalizado]); // Depende de isLocked e rodadaId
 
-    const onStarted = ({ duration }) => {
-      setTimeLeft(duration)
-      setPlacarRodada({})
-      setIsLocked(false)
+
+  // --- LÓGICA DE INTERLIGAÇÃO (Mesma de antes) ---
+
+  const onSkipCategory = (temaId) => {
+    handleSkipCategory(temaId); // Do hook de input
+    setActiveSkipPowerUpId(null); // Do hook de socket/effects
+  };
+  
+  const onUsePowerUp = (powerUp) => {
+    if (powerUp.code === 'SKIP_OWN_CATEGORY' && activeSkipPowerUpId) {
+      alert("Pular Categoria já está ativo!"); return;
     }
-
-    const onTick = (t) => setTimeLeft(t)
-
-    const onStopping = async ({ roundId }) => {
-      setIsLocked(true)
-      try {
-        await enviarRespostas(roundId) // envio final
-      } catch (e) {
-        console.error('auto-send on stopping failed', e)
-      }
+    if (powerUp.code === 'REVEAL_OPPONENT_ANSWER' && effectsState.revealPending) {
+      alert("Você já ativou a revelação para esta rodada."); return;
     }
+    handleUsePowerUp(powerUp); // Do hook de power-ups
+  };
 
-    const onEnd = ({ roundId, roundScore, totais }) => {
-      setPlacarRodada(roundScore || {})
-      setTotais(totais || {})
-      setTimeLeft(null)
-      setIsLocked(true)
-    }
 
-    const onMatchEnd = ({ totais, vencedor }) => {
-      setFinalizado(true)
-      setTotais(totais || {})
-      setVencedor(vencedor)
-      setIsLocked(true)
-    }
-
-    socket.on('round:ready', onReady)
-    socket.on('round:started', onStarted)
-    socket.on('round:tick', onTick)
-    socket.on('round:stopping', onStopping)
-    socket.on('round:end', onEnd)
-    socket.on('match:end', onMatchEnd)
-
-    return () => {
-      socket.off('round:ready', onReady)
-      socket.off('round:started', onStarted)
-      socket.off('round:tick', onTick)
-      socket.off('round:stopping', onStopping)
-      socket.off('round:end', onEnd)
-      socket.off('match:end', onMatchEnd)
-      for (const t of debounceTimers.current.values()) clearTimeout(t)
-      debounceTimers.current.clear()
-    }
-  }, [salaId])
-
-  const iniciarPartida = async () => {
-    await api.post('/matches/start', { sala_id: Number(salaId), duration: 20 })
-  }
-
-  // ---- AUTOSAVE (debounced) ----
-  async function autosaveAnswer(temaId, texto) {
-    // ignora se não temos rodada ou está travado
-    if (!rodadaId || isLocked) return
-    const key = String(temaId)
-
-    // limpa debounce anterior
-    const prev = debounceTimers.current.get(key)
-    if (prev) clearTimeout(prev)
-
-    // agenda envio em 250ms
-    const t = setTimeout(async () => {
-      try {
-        await api.post('/answers', {
-          rodada_id: Number(rodadaId),
-          tema_id: Number(temaId),
-          texto: String(texto || '')
-        })
-      } catch (e) {
-        console.error('autosave fail', { rodadaId, temaId }, e?.response?.data || e)
-      } finally {
-        debounceTimers.current.delete(key)
-      }
-    }, 250)
-
-    debounceTimers.current.set(key, t)
-  }
-
-  const updateAnswer = (temaId, texto) => {
-    if (isLocked) return
-    setAnswers(prev => ({ ...prev, [temaId]: texto }))
-    autosaveAnswer(temaId, texto)
-  }
-
-  // envio final (quando STOP ou round:stopping)
-  const enviarRespostas = async (roundIdSnapshot) => {
-    const rid = Number(roundIdSnapshot || rodadaId)
-    if (!rid) return
-
-    // drena debounces pendentes primeiro
-    for (const t of debounceTimers.current.values()) clearTimeout(t)
-    debounceTimers.current.clear()
-
-    const payloads = Object.entries(answers)
-      .filter(([, texto]) => typeof texto === 'string')
-      .map(([temaId, texto]) => ({
-        rodada_id: rid,
-        tema_id: Number(temaId),
-        texto: String(texto || '')
-      }))
-
-    if (!payloads.length) return
-    const results = await Promise.allSettled(payloads.map(p => api.post('/answers', p)))
-    const fails = results.filter(r => r.status === 'rejected')
-    if (fails.length) {
-      console.error('Falhas no envio final:', fails.map(f => f.reason?.response?.data || f.reason))
-    }
-  }
-
-  const onStop = async () => {
-    const rid = Number(rodadaId)
-    if (!rid) return
-    setIsLocked(true)
-
-    try { await enviarRespostas(rid) } catch (e) { console.error(e) }
-
-    socket.emit('round:stop', {
-      salaId: Number(salaId),
-      roundId: rid,
-      by: meuJogadorId
-    })
-  }
-
-  if (finalizado) {
-    const isEmpate = vencedor?.empate
-    return (
-      <div className="max-w-xl mx-auto text-white">
-        <h2 className="text-2xl font-bold">Partida encerrada</h2>
-
-        {isEmpate ? (
-          <p>
-            <b>Empate!</b> Jogadores {Array.isArray(vencedor?.jogadores) ? vencedor.jogadores.join(' & ') : '-'}
-            {' '}com {vencedor?.total ?? 0} pts.
-          </p>
-        ) : (
-          <p>
-            Vencedor: <b>{vencedor?.jogador_id ?? '-'}</b> ({vencedor?.total ?? 0} pts)
-          </p>
-        )}
-
-        <h3 className="mt-3 font-medium">Totais</h3>
-        <pre className="bg-gray-800 p-3 rounded mt-1 text-sm">
-          {JSON.stringify(totais, null, 2)}
-        </pre>
-      </div>
-    )
-  }
-
+  // --- RENDERIZAÇÃO (Mesma de antes) ---
   return (
-    <div className="max-w-2xl mx-auto text-white space-y-4">
-      <header className="flex items-center justify-between">
-        <div>Sala #{salaId} • Você: {meuJogadorId}</div>
-        <div className="font-mono">⏱ {timeLeft ?? '--'}</div>
-      </header>
+    <>
+      {/* 1. Overlay de Jumpscare */}
+      <AnimatePresence>
+        {effectsState.showJumpscare && (
+          <JumpscareOverlay
+            imageUrl={effectsState.jumpscareData.image}
+            soundUrl={effectsState.jumpscareData.sound}
+            onEnd={() => effectsState.setShowJumpscare(false)}
+          />
+        )}
+      </AnimatePresence>
 
-      {!rodadaId ? (
-        <button
-          className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded"
-          onClick={iniciarPartida}
-        >
-          Iniciar Partida
-        </button>
+      {/* 2. Conteúdo Principal da Página */}
+      {finalizado ? (
+        // Tela de Fim de Jogo
+        <MatchEndScreen
+          totais={totais}
+          vencedor={vencedor}
+          meuJogadorId={meuJogadorId}
+          onReFetchInventory={fetchInventory} // Passa a função para rebuscar moedas
+        />
+      ) : !rodadaId ? (
+        // Tela de "Aguardando"
+        <WaitingForRound salaId={salaId} />
       ) : (
-        <>
-          <h2 className="text-xl font-semibold">
-            Letra: <span className="font-mono">{letra}</span>
-          </h2>
-
-          <div className="space-y-3">
-            {(temas || []).map(t => (
-              <CategoryRow
-                key={t.id}
-                categoryName={t.nome}
-                value={answers[t.id] || ''}
-                onChange={e => updateAnswer(t.id, e.target.value)}
-                isDisabled={isLocked || timeLeft === 0}
-              />
-            ))}
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              className="bg-red-600 px-4 py-2 rounded hover:bg-red-700"
-              onClick={onStop}
-              disabled={!rodadaId || isLocked}
-            >
-              STOP
-            </button>
-          </div>
-
-          {(Object.keys(placarRodada).length > 0 || Object.keys(totais).length > 0) && (
-            <div className="bg-gray-800 p-3 rounded">
-              <h3 className="font-medium">Placar da rodada</h3>
-              <pre className="text-sm">{JSON.stringify(placarRodada, null, 2)}</pre>
-              <h3 className="font-medium mt-2">Totais</h3>
-              <pre className="text-sm">{JSON.stringify(totais, null, 2)}</pre>
-            </div>
-          )}
-        </>
+        // Tela de "Jogo Ativo"
+        <ActiveRound
+          salaId={salaId}
+          meuJogadorId={meuJogadorId}
+          gameState={gameState}
+          effectsState={{...effectsState, activeSkipPowerUpId, setActiveSkipPowerUpId}}
+          inputState={{ answers, updateAnswer, onStop, skippedCategories, handleSkipCategory: onSkipCategory }}
+          powerUpState={{ inventario, loadingInventory, handleUsePowerUp: onUsePowerUp }}
+        />
       )}
-    </div>
-  )
+    </>
+  );
 }
-
