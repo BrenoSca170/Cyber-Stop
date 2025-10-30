@@ -1,3 +1,52 @@
+/* 1. Importar a biblioteca augmented-ui */
+@import "augmented-ui/augmented-ui.min.css";
+
+/* 2. Importar as camadas do Tailwind */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* 3. Definir as camadas de base (incluindo o tema) */
+@layer base {
+  
+  /* * Esta é a sua "Skin" Cyberpunk.
+   * Você pode criar outras (ex: .theme-default) no futuro.
+   */
+  :root.theme-cyberpunk {
+    /* --- Nossas variáveis de cor semânticas --- */
+    --color-primary: 240 0 255;      /* cyber-pink (como RGB) */
+    --color-secondary: 0 240 255;   /* cyber-blue (como RGB) */
+    --color-accent: 57 255 20;      /* cyber-lime (como RGB) */
+    --color-warning: 255 239 0;    /* cyber-yellow (como RGB) */
+
+    --color-text-base: 224 224 224;  /* #e0e0e0 */
+    --color-text-header: var(--color-secondary);
+    --color-text-muted: 100 100 120;
+
+    --color-bg-primary: 10 10 26;    /* #0a0a1a */
+    --color-bg-secondary: 26 26 46;  /* #1a1a2e */
+    --color-bg-input: 15 15 32;      /* #0f0f20 */
+
+    --color-border: var(--color-secondary);
+    --color-border-accent: var(--color-primary);
+
+    /* --- Variáveis específicas do augmented-ui --- */
+    /* Elas também leem nossas variáveis de tema! */
+    --aug-border-color: rgb(var(--color-border));
+    --aug-border-opacity: 0.7;
+    --aug-corner-bg: rgb(var(--color-bg-secondary));
+    --aug-inlay-color: rgb(var(--color-bg-input));
+    --aug-inlay-opacity: 0.6;
+  }
+
+  /* 4. Aplicar estilos de base ao <html> */
+  html {
+    /* * O Tailwind agora usará as classes bg-bg-primary e text-text-base 
+     * que serão definidas no Passo 3 (tailwind.config.js) 
+     */
+    @apply bg-bg-primary text-text-base;
+    
+    /* Opcional: Adicionar a fonte (requer importação no index.html) */
+    /* font-family: 'Orbitron', sans-serif; */
+  }
+}

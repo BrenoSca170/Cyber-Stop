@@ -34,32 +34,55 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-900 text-white p-4">
-      <form onSubmit={submit} className="w-full max-w-md bg-gray-800 p-6 rounded">
-        <h2 className="text-2xl font-bold mb-4">{isLogin ? 'Login' : 'Criar conta'}</h2>
-
+      <div 
+      className="min-h-screen flex items-center justify-center bg-bg-primary p-4 font-cyber [perspective:1000px]"
+        >
+      <form 
+        onSubmit={submit} 
+        className="w-full max-w-md bg-bg-secondary p-6 transition-transform duration-500 [transform-style:preserve-3d] hover:[transform:rotateY(5deg)]"
+        data-augmented-ui="tl-clip tr-clip br-clip bl-clip border"
+      >
+        {/* Adicione [transform:translateZ(20px)] para "levantar" os elementos filhos */}
+        <h2 className="text-2xl font-bold mb-4 text-text-header [transform:translateZ(20px)]">
+          {isLogin ? 'Conectar ao Grid' : 'Criar Identidade'}
+        </h2>
         {!isLogin && (
-          <input className="w-full p-3 mb-3 bg-gray-700 rounded"
-                 placeholder="Nome de usuário"
-                 value={username} onChange={(e)=>setUsername(e.target.value)} required />
+          <input 
+            className="w-full p-3 mb-3 bg-bg-input border border-border-accent/30 focus:outline-none focus:ring-2 focus:ring-border-accent text-accent placeholder-text-muted/70"
+            placeholder="Seu Identificador (Nome)"
+            value={username} onChange={(e)=>setUsername(e.target.value)} required 
+          />
         )}
 
-        <input className="w-full p-3 mb-3 bg-gray-700 rounded"
-               placeholder="Email" type="email"
-               value={email} onChange={(e)=>setEmail(e.target.value)} required />
+        <input 
+          className="w-full p-3 mb-3 bg-bg-input border border-border-accent/30 focus:outline-none focus:ring-2 focus:ring-border-accent text-accent placeholder-text-muted/70"
+           placeholder="Credencial (Email)" type="email"
+           value={email} onChange={(e)=>setEmail(e.target.value)} required 
+        />
 
-        <input className="w-full p-3 mb-3 bg-gray-700 rounded"
-               placeholder="Senha" type="password"
-               value={password} onChange={(e)=>setPassword(e.target.value)} required />
+        <input 
+          className="w-full p-3 mb-3 bg-bg-input border border-border-accent/30 focus:outline-none focus:ring-2 focus:ring-border-accent text-accent placeholder-text-muted/70"
+           placeholder="Chave de Acesso (Senha)" type="password"
+           value={password} onChange={(e)=>setPassword(e.target.value)} required 
+        />
 
         {error && <div className="text-red-400 mb-3">{error}</div>}
 
-        <button disabled={loading} className="w-full bg-blue-600 p-3 rounded mb-2">
-          {loading ? 'Aguarde...' : (isLogin ? 'Entrar' : 'Registrar')}
+        {/* Botão com augmented-ui */}
+        <button 
+          disabled={loading} 
+          className="w-full bg-primary text-black font-bold tracking-wider p-3 mb-2 
+                     transition-transform duration-150 [transform-style:preserve-3d] 
+                     hover:[transform:translateZ(10px)] 
+                     active:[transform:translateZ(2px)] 
+                     disabled:bg-gray-600"
+          data-augmented-ui="tl-scoop tr-scoop br-scoop bl-scoop"
+        >
+          {loading ? 'Processando...' : (isLogin ? 'Acessar' : 'Registrar')}
         </button>
 
-        <button type="button" onClick={()=>setIsLogin(!isLogin)} className="text-sm text-gray-300">
-          {isLogin ? 'Criar uma conta' : 'Já tenho conta'}
+        <button type="button" onClick={()=>setIsLogin(!isLogin)} className="text-sm text-secondary hover:underline">
+          {isLogin ? 'Não tem registro? Crie uma identidade' : 'Já está no Grid? Conecte-se'}
         </button>
       </form>
     </div>
