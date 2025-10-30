@@ -1,48 +1,71 @@
+// src/components/CyberLogo.jsx
 import { Canvas, useFrame } from '@react-three/fiber'
-import { useRef } from 'react'
+import { useRef, Suspense } from 'react'
+import { useGLTF, OrbitControls } from '@react-three/drei' // Importe o OrbitControls para testar
 
-// Componente interno que lida com a lógica 3D
-function SpinningMesh() {
-  // useRef é usado para obter uma referência ao objeto 3D (como o document.getElementById)
-  const meshRef = useRef()
+// Um componente "placeholder" para mostrar enquanto o modelo 3D carrega
+function Loader() {
+  return (
+    <mesh>
+      <boxGeometry args={[1, 1, 1]} />
+      <meshBasicMaterial color="rgb(var(--color-primary))" wireframe />
+    </mesh>
+  )
+}
 
-  // useFrame é um hook que roda a cada frame (60fps)
+// Componente interno que lida com o modelo
+function SpinningModel() {
+  // 1. Aponte para o arquivo .GLTF
+  // (Troque 'meu_logo.gltf' pelo nome exato do seu arquivo)
+  const { scene } = useGLTF('/AtomoBásico.gltf')
+  
+  const modelRef = useRef()
+
+  // 2. Animação de rotação
   useFrame((state, delta) => {
-    // Gira o cubo
-    if (meshRef.current) {
-      meshRef.current.rotation.x += delta * 0.5
-      meshRef.current.rotation.y += delta * 0.5
+    if (modelRef.current) {
+      modelRef.current.rotation.y += delta * 0.5
     }
   })
 
+  // 3. Renderiza a cena carregada
+  // Ajuste o 'scale' para o tamanho desejado
   return (
-    <mesh ref={meshRef}>
-      {/* A geometria (o formato) */}
-      <boxGeometry args={[2, 2, 2]} />
-      {/* O material (a "skin" do objeto) */}
-      {/* 'meshStandardMaterial' reage à luz. 'color' é a cor base. */}
-      {/* 'emissive' é a cor que "brilha" (perfeito para neon) */}
-      <meshStandardMaterial 
-        color="rgb(var(--color-primary))" 
-        emissive="rgb(var(--color-primary))" 
-        emissiveIntensity={2} 
-      />
-    </mesh>
+    <primitive
+      ref={modelRef}
+      object={scene}
+      scale={1.0} 
+    />
   )
 }
 
 // Componente principal que exportamos
 export default function CyberLogo() {
   return (
-    // O Canvas é onde a cena 3D é renderizada.
     <Canvas>
-      {/* Adiciona uma luz ambiente para que possamos ver o objeto */}
-      <ambientLight intensity={0.1} />
-      {/* Adiciona uma luz pontual (como uma lâmpada) */}
-      <pointLight position={[5, 5, 5]} intensity={1000} color="rgb(var(--color-secondary))" />
-      
-      {/* Renderiza nosso cubo giratório */}
-      <SpinningMesh />
+      {/* 4. 'Suspense' é necessário para mostrar o Loader enquanto o modelo carrega */}
+      <Suspense fallback={<Loader />}>
+        {/* Ajuste as luzes para o seu modelo */}
+        <ambientLight intensity={1.0} />
+        
+        <directionalLight 
+          position={[5, 10, 5]} 
+          intensity={3} 
+          color="rgb(var(--color-secondary))" 
+        />
+        
+        <pointLight 
+          position={[-5, -5, -5]} 
+          intensity={1000} 
+          color="rgb(var(--color-primary))" 
+        />
+        
+        {/* Renderiza nosso novo modelo giratório */}
+        <SpinningModel />
+
+        {/* 5. (Opcional) Adicione OrbitControls para poder girar o modelo com o mouse e testar */}
+        {/* <OrbitControls /> */}
+      </Suspense>
     </Canvas>
   )
 }
