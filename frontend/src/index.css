@@ -6,6 +6,7 @@
 @tailwind components;
 @tailwind utilities;
 
+
 /* 3. Definir as camadas de base (incluindo o tema) */
 @layer base {
   
