@@ -119,7 +119,10 @@ export default function GameScreen() {
         />
       ) : !rodadaId ? (
         // Tela de "Aguardando"
-        <WaitingForRound salaId={salaId} />
+        <WaitingForRound 
+          salaId={salaId}
+          // A prop socket={socket} foi REMOVIDA
+        />
       ) : (
         // Tela de "Jogo Ativo"
         <ActiveRound

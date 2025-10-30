@@ -1,6 +1,7 @@
 // src/hooks/useGameSocket.js
 import { useState, useEffect } from 'react';
 import socket, { joinRoom } from '../lib/socket';
+import api from '../lib/api'; // <-- 1. IMPORTAR API
 
 // 1. Remova 'onReceivingAnswers' dos parâmetros
 export function useGameSocket(salaId) {
@@ -38,6 +39,7 @@ export function useGameSocket(salaId) {
       setRevealedAnswer(null);
       setShowJumpscare(false);
       setPlacarRodada({});
+      setTotais({}); // Garante que totais da rodada anterior são limpos
       setFinalizado(false);
       setVencedor(null);
     };
@@ -113,6 +115,32 @@ export function useGameSocket(salaId) {
     socket.on('powerup:error', onPowerUpError);
     socket.on('app:error', onAppError);
 
+
+    // --- 2. INÍCIO DA NOVA CORREÇÃO ---
+    // Função para "chamar" a partida
+    const fetchMatch = async () => {
+      try {
+        console.log(`[useGameSocket] Listeners registrados. Chamando /matches/start...`);
+        // Esta chamada vai fazer o backend emitir 'round:ready' e 'round:started'
+        // que serão pegos pelos listeners acima.
+        await api.post('/matches/start', { sala_id: Number(salaId), duration: 20 });
+      } catch (error) {
+        console.error("[useGameSocket] Erro ao chamar /matches/start:", error);
+        alert(`Erro ao carregar a partida: ${error.response?.data?.error || error.message}`);
+      }
+    };
+
+    // Se o socket já estiver conectado, chama.
+    if (socket.connected) {
+      fetchMatch();
+    } else {
+      // Se não, espera conectar e *então* chama.
+      // (usamos .once para garantir que rode só uma vez)
+      socket.once('connect', fetchMatch);
+    }
+    // --- FIM DA NOVA CORREÇÃO ---
+
+
     // Função de limpeza
     return () => {
       console.log("Limpando listeners do useGameSocket");
@@ -129,6 +157,7 @@ export function useGameSocket(salaId) {
       socket.off('powerup:ack', onPowerUpAck);
       socket.off('powerup:error', onPowerUpError);
       socket.off('app:error', onAppError);
+      socket.off('connect', fetchMatch); // Limpa o listener 'connect' também
     };
   }, [salaId]); // 3. A dependência 'onReceivingAnswers' foi removida
 

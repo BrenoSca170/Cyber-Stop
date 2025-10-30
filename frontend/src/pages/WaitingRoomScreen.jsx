@@ -76,7 +76,27 @@ function WaitingRoomScreen() {
                     setSala(salaData); //
                     setError(''); //
 
-                    // Navega se o jogo começou (MOVEMOS ISSO PARA O SOCKET)
+                    // --- INÍCIO DA CORREÇÃO ---
+                    // Se o polling detectar que o jogo começou (status mudou para 'in_progress')
+                    // navega para a tela do jogo. Isso corrige a race condition
+                    // caso o evento socket 'round:ready' tenha sido perdido.
+                    if (salaData.status === 'in_progress') {
+                         console.log(`[Polling] Detectou status 'in_progress'. Navegando para /game/${salaId}...`);
+                         // Limpa o intervalo ANTES de navegar para evitar chamadas extras
+                         if (intervalId) clearInterval(intervalId);
+                         
+                         // Remove listeners desta tela ANTES de navegar
+                         // (Funções definidas abaixo no código)
+                         socket.off('room:players_updated', handlePlayersUpdate);
+                         socket.off('room:abandoned', handleRoomAbandoned);
+                         socket.off('round:ready', handleGameStarted);
+                         socket.off('round:started', handleGameStarted);
+
+                         navigate(`/game/${salaId}`); // Navega para o jogo
+                         return; // Para a execução desta função de fetch
+                    }
+                    // --- FIM DA CORREÇÃO ---
+
 
                      // Se a sala foi terminada ou abandonada enquanto esperava, volta ao lobby
                      if (salaData.status === 'terminada' || salaData.status === 'abandonada') {

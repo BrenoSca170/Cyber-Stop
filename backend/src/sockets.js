@@ -155,11 +155,10 @@ export function scheduleRoundCountdown({ salaId, roundId, duration = 20 }) { //
         io.to(salaId).emit('round:stopping', { roundId }); //
         await sleep(GRACE_MS); //
 
-        // Re-verifica se pontuou durante o sleep (ex: por um clique STOP)
-        if (scoredRounds.has(`${salaId}-${roundId}`)) {
-             console.warn(`[TIMER->STOP] Rodada ${roundId} pontuada durante GRACE_MS. Abortando pontuação do timer.`);
-             return;
-        }
+        // --- CORREÇÃO APLICADA ---
+        // O bloco 'if (scoredRounds.has(...))' que estava aqui foi REMOVIDO.
+        // Ele fazia o timer se auto-bloquear.
+        // --- FIM DA CORREÇÃO ---
 
         const payload = await endRoundAndScore({ salaId, roundId }); //
 
@@ -478,6 +477,86 @@ export function initSockets(httpServer) { //
             case 'REVEAL_OPPONENT_ANSWER': //
               addRevealRequest(salaId, currentRoundId, usuarioJogadorId); //
               socket.emit('powerup:ack', { codigo: efeito, message: 'Revelação de resposta ativada para o final desta rodada.' }); //
+              break;
+            case 'BLOCK_OPPONENT_TYPE_5S': //
+              // Bloqueia digitação do adversário por 5 segundos
+              try {
+                const todosJogadores = await getJogadoresDaSala(salaId);
+                const oponentesIds = todosJogadores.filter(id => id !== usuarioJogadorId);
+                
+                if (oponentesIds.length === 0) {
+                  socket.emit('powerup:error', { message: 'Não há oponentes na sala para bloquear.' });
+                  return;
+                }
+                
+                // Se targetPlayerId foi especificado, usa ele; senão seleciona aleatório
+                let targetId = targetPlayerId ? Number(targetPlayerId) : oponentesIds[Math.floor(Math.random() * oponentesIds.length)];
+                
+                // Verifica se o alvo é válido
+                if (!oponentesIds.includes(targetId)) {
+                  targetId = oponentesIds[0]; // Fallback para primeiro oponente
+                }
+                
+                const targetSocketId = await getSocketIdByPlayerId(targetId);
+                if (targetSocketId) {
+                  io.to(targetSocketId).emit('effect:block_typing', { duration: 5, attackerId: usuarioJogadorId });
+                  socket.emit('powerup:ack', { codigo: efeito, message: `Digitação do adversário bloqueada por 5 segundos!` });
+                  console.log(`[BLOCK_TYPE] Jogador ${usuarioJogadorId} bloqueou digitação de ${targetId} por 5s`);
+                } else {
+                  socket.emit('powerup:error', { message: 'Oponente não está conectado.' });
+                }
+              } catch (err) {
+                console.error('[BLOCK_TYPE] Erro:', err);
+                socket.emit('powerup:error', { message: 'Erro ao aplicar bloqueio de digitação.' });
+              }
+              break;
+            case 'CLEAR_OPPONENT_ANSWERS': //
+              // Apaga os campos já escritos do adversário
+              try {
+                const todosJogadores = await getJogadoresDaSala(salaId);
+                const oponentesIds = todosJogadores.filter(id => id !== usuarioJogadorId);
+                
+                if (oponentesIds.length === 0) {
+                  socket.emit('powerup:error', { message: 'Não há oponentes na sala para afetar.' });
+                  return;
+                }
+                
+                // Se targetPlayerId foi especificado, usa ele; senão seleciona aleatório
+                let targetId = targetPlayerId ? Number(targetPlayerId) : oponentesIds[Math.floor(Math.random() * oponentesIds.length)];
+                
+                // Verifica se o alvo é válido
+                if (!oponentesIds.includes(targetId)) {
+                  targetId = oponentesIds[0]; // Fallback para primeiro oponente
+                }
+                
+                // Apaga as respostas do adversário no banco de dados para a rodada atual
+                const { error: clearError } = await supa
+                  .from('participacao_rodada')
+                  .update({ resposta: '' })
+                  .eq('rodada_id', currentRoundId)
+                  .eq('jogador_id', targetId);
+                
+                if (clearError) {
+                  console.error('[CLEAR_ANSWERS] Erro ao limpar respostas:', clearError);
+                  socket.emit('powerup:error', { message: 'Erro ao apagar respostas do adversário.' });
+                  return;
+                }
+                
+                // Envia evento para o frontend do adversário limpar os campos
+                const targetSocketId = await getSocketIdByPlayerId(targetId);
+                if (targetSocketId) {
+                  io.to(targetSocketId).emit('effect:clear_answers', { attackerId: usuarioJogadorId });
+                  socket.emit('powerup:ack', { codigo: efeito, message: `Campos do adversário foram apagados!` });
+                  console.log(`[CLEAR_ANSWERS] Jogador ${usuarioJogadorId} apagou respostas de ${targetId}`);
+                } else {
+                  // Mesmo que não encontre socket, as respostas já foram apagadas do banco
+                  socket.emit('powerup:ack', { codigo: efeito, message: `Campos do adversário foram apagados!` });
+                  console.log(`[CLEAR_ANSWERS] Respostas de ${targetId} apagadas (jogador offline)`);
+                }
+              } catch (err) {
+                console.error('[CLEAR_ANSWERS] Erro:', err);
+                socket.emit('powerup:error', { message: 'Erro ao apagar campos do adversário.' });
+              }
               break;
             default: //
               console.warn(`[powerup:use] Efeito desconhecido: ${efeito}`); //
