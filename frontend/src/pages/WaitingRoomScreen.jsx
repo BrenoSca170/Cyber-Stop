@@ -1,166 +1,130 @@
-// src/pages/WaitingRoomScreen.jsx
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import api from '../lib/api'; // Usa a instância axios configurada
-import socket from '../lib/socket'; // Importar instância do socket
-import { ArrowLeft, Loader2, Play, ClipboardCopy, Users } from 'lucide-react'; // Ícones atualizados
+import api from '../lib/api';
+import socket from '../lib/socket';
+import { ArrowLeft, Loader2, Play, ClipboardCopy, Users } from 'lucide-react';
+import LetterGlitch from '../components/LetterGlitch';
+import PixelBlast from '../components/PixelBlast';
+import Hyperspeed from '../components/Hyperspeed';
 
 function WaitingRoomScreen() {
-    const { salaId } = useParams(); // Pega o ID da sala da URL
-    const navigate = useNavigate(); //
-    const [sala, setSala] = useState(null); //
-    const [loading, setLoading] = useState(true); //
-    const [error, setError] = useState(''); //
-    const [copySuccess, setCopySuccess] = useState(''); // Estado para feedback de cópia
-    const [leaving, setLeaving] = useState(false); // Estado para indicar que está saindo
+    const { salaId } = useParams(); 
+    const navigate = useNavigate(); 
+    const [sala, setSala] = useState(null); 
+    const [loading, setLoading] = useState(true); 
+    const [error, setError] = useState(''); 
+    const [copySuccess, setCopySuccess] = useState(''); 
+    const [leaving, setLeaving] = useState(false); 
 
-    // Função para copiar o ID da sala para a área de transferência
-    const copyToClipboard = async () => { //
-        try { //
-            await navigator.clipboard.writeText(salaId); //
-            setCopySuccess('ID copiado!'); //
-            setTimeout(() => setCopySuccess(''), 2000); //
-        } catch (err) { //
-            setCopySuccess('Falha ao copiar'); //
-            console.error('Falha ao copiar ID da sala: ', err); //
-            setTimeout(() => setCopySuccess(''), 2000); //
+    // ... (Todas as funções: copyToClipboard, handleStartGame, handleLeaveRoom) ...
+    // ... (Toda a lógica dentro do useEffect) ...
+    // NENHUMA LÓGICA PRECISA MUDAR.
+
+    // --- Funções de Lógica (sem alteração) ---
+    const copyToClipboard = async () => { 
+        try { 
+            await navigator.clipboard.writeText(salaId); 
+            setCopySuccess('ID copiado!'); 
+            setTimeout(() => setCopySuccess(''), 2000); 
+        } catch (err) { 
+            setCopySuccess('Falha ao copiar'); 
+            console.error('Falha ao copiar ID da sala: ', err); 
+            setTimeout(() => setCopySuccess(''), 2000); 
         }
     };
-
-    // Função para chamar o endpoint de início de partida
-    const handleStartGame = async () => { //
-        setLoading(true); //
-        setError(''); //
-        try { //
-            // Chama API para iniciar partida
+    const handleStartGame = async () => { 
+        setLoading(true); 
+        setError(''); 
+        try { 
             await api.post(`/matches/start`, { sala_id: Number(salaId) });
-            // A navegação será tratada pelo useEffect ao detectar mudança de status
-        } catch (err) { //
-            console.error('Erro ao iniciar partida:', err); //
-            setError(err.response?.data?.error || err.message || 'Falha ao iniciar a partida.'); //
-            setLoading(false); // Remove loading se deu erro
+        } catch (err) { 
+            console.error('Erro ao iniciar partida:', err); 
+            setError(err.response?.data?.error || err.message || 'Falha ao iniciar a partida.'); 
+            setLoading(false); 
         }
     };
-
-    // Função para sair da sala - AGORA CHAMA A API
-    const handleLeaveRoom = async () => { //
+    const handleLeaveRoom = async () => { 
       setLeaving(true);
       setError('');
       try {
-          await api.post(`/rooms/${salaId}/leave`); // Chama a nova rota
-          navigate('/'); // Volta para o Lobby após sair com sucesso
+          await api.post(`/rooms/${salaId}/leave`); 
+          navigate('/'); 
       } catch (error) {
           console.error("Erro ao sair da sala:", error);
           setError(error.response?.data?.error || error.message || 'Falha ao sair da sala.');
-          // Limpa o erro após um tempo
           setTimeout(() => setError(''), 3000);
-          setLeaving(false); // Permite tentar novamente após erro
+          setLeaving(false); 
       }
     };
-
-    // Efeito para buscar o estado da sala periodicamente E OUVIR SOCKETS
-    useEffect(() => { //
-        let isMounted = true; //
-        let intervalId = null; //
-        let initialLoadAttempted = false; //
+    useEffect(() => { 
+        let isMounted = true; 
+        let intervalId = null; 
+        let initialLoadAttempted = false; 
 
         const fetchSalaState = async (isInitial = false) => {
-            if (!isMounted) return; //
+            if (!isMounted) return; 
              if (isInitial) setLoading(true);
-
-            try { //
-                const response = await api.get(`/rooms/${salaId}`); //
-                const salaData = response.data; //
-
-                if (isMounted) { //
-                    setSala(salaData); //
-                    setError(''); //
-
-                    // --- INÍCIO DA CORREÇÃO ---
-                    // Se o polling detectar que o jogo começou (status mudou para 'in_progress')
-                    // navega para a tela do jogo. Isso corrige a race condition
-                    // caso o evento socket 'round:ready' tenha sido perdido.
+            try { 
+                const response = await api.get(`/rooms/${salaId}`); 
+                const salaData = response.data; 
+                if (isMounted) { 
+                    setSala(salaData); 
+                    setError(''); 
                     if (salaData.status === 'in_progress') {
-                         console.log(`[Polling] Detectou status 'in_progress'. Navegando para /game/${salaId}...`);
-                         // Limpa o intervalo ANTES de navegar para evitar chamadas extras
-                         if (intervalId) clearInterval(intervalId);
-                         
-                         // Remove listeners desta tela ANTES de navegar
-                         // (Funções definidas abaixo no código)
+                         console.log(`[Polling] Detectou status 'in_progress'. Navegando...`);
+                         if (intervalId) clearInterval(intervalId); 
                          socket.off('room:players_updated', handlePlayersUpdate);
                          socket.off('room:abandoned', handleRoomAbandoned);
                          socket.off('round:ready', handleGameStarted);
                          socket.off('round:started', handleGameStarted);
-
-                         navigate(`/game/${salaId}`); // Navega para o jogo
-                         return; // Para a execução desta função de fetch
+                         navigate(`/game/${salaId}`); 
+                         return; 
                     }
-                    // --- FIM DA CORREÇÃO ---
-
-
-                     // Se a sala foi terminada ou abandonada enquanto esperava, volta ao lobby
                      if (salaData.status === 'terminada' || salaData.status === 'abandonada') {
                          console.log(`Sala ${salaId} com status ${salaData.status}, voltando ao lobby.`);
                          alert(`A sala foi ${salaData.status}.`);
                          navigate('/');
                      }
                 }
-
-            } catch (err) { //
-                console.error('Erro ao buscar estado da sala:', err); //
-                 if (isMounted) { //
-                    // Se receber 410 (Gone) ou 404 (Not Found)...
-                    if (err.response?.status === 404 || err.response?.status === 410) { //
-                        
-                         // --- MODIFICAÇÃO CHAVE AQUI ---
-                         // Se a falha (404/410) ocorreu na *primeira tentativa* de carregamento...
+            } catch (err) { 
+                console.error('Erro ao buscar estado da sala:', err); 
+                 if (isMounted) { 
+                    if (err.response?.status === 404 || err.response?.status === 410) { 
                         if (!initialLoadAttempted) {
-                            // ... é provável que seja a race condition. Não navegue.
-                            // Apenas exiba um erro temporário e deixe o polling tentar de novo.
-                            console.warn("Falha na busca inicial da sala (404/410). Provável race condition. Tentando novamente via polling...");
+                            console.warn("Falha na busca inicial da sala (404/410).");
                             setError('Conectando à sala... (tentativa 1 falhou, tentando de novo...)');
                         } else {
-                            // Se a falha (404/410) ocorreu DEPOIS da carga inicial (no polling)...
-                            // ...aí sim a sala realmente foi abandonada ou não existe.
-                            alert(err.response?.data?.error || 'Sala não encontrada ou abandonada. A redirecionar para o lobby.'); //
-                            navigate('/'); //
+                            alert(err.response?.data?.error || 'Sala não encontrada ou abandonada.'); 
+                            navigate('/'); 
                         }
-                        // --- FIM DA MODIFICAÇÃO ---
-
-                    } else { //
-                        // Outros erros (ex: 500)
-                        if (initialLoadAttempted) { //
-                           setError('Não foi possível atualizar o estado da sala. Tentando novamente...'); //
-                        } else { //
-                           setError('Falha ao carregar dados da sala. Verifique o ID ou tente novamente.');
-                           console.warn("Falha na busca inicial da sala (outro erro)."); //
+                    }
+                     else { 
+                        if (initialLoadAttempted) { 
+                           setError('Não foi possível atualizar o estado da sala. Tentando novamente...'); 
+                        } else {
+                           setError('Falha ao carregar dados da sala.');
+                           console.warn("Falha na busca inicial da sala (outro erro)."); 
                         }
                     }
                  }
-           } finally { //
-               // Garante que setLoading(false) só roda uma vez após a primeira tentativa
-               if (isMounted && !initialLoadAttempted) { //
-                   initialLoadAttempted = true; //
-                   setLoading(false); //
+           } finally { 
+               if (isMounted && !initialLoadAttempted) { 
+                   initialLoadAttempted = true; 
+                   setLoading(false); 
                } else if (isMounted && isInitial) {
-                    setLoading(false); // Garante que tira o loading inicial mesmo se falhar
+                    setLoading(false); 
                }
            }
         };
-
-       // --- LISTENERS DO SOCKET.IO ---
        const handlePlayersUpdate = ({ jogadores }) => {
            console.log('Recebido room:players_updated', jogadores);
            if (isMounted) {
-               // Atualiza a lista de jogadores no estado local da sala
                setSala(currentSala => {
-                   if (!currentSala) return null; // Se sala ainda não carregou, ignora
-                   // Retorna um NOVO objeto sala com a lista de jogadores atualizada
+                   if (!currentSala) return null; 
                    return { ...currentSala, jogadores: jogadores };
                });
            }
        };
-
        const handleRoomAbandoned = ({ message }) => {
            console.log('Recebido room:abandoned', message);
            if (isMounted) {
@@ -168,168 +132,156 @@ function WaitingRoomScreen() {
                navigate('/');
            }
        };
-       
        const handleGameStarted = (data) => {
-            console.log("Recebido 'round:ready' ou 'round:started'. Navegando para o jogo...", data);
+            console.log("Recebido 'round:ready' ou 'round:started'. Navegando...", data);
             if (isMounted) {
-                // Remove listeners específicos desta tela ANTES de navegar
                 socket.off('room:players_updated', handlePlayersUpdate);
                 socket.off('room:abandoned', handleRoomAbandoned);
-                socket.off('round:ready', handleGameStarted); // Desregistra este listener
-                socket.off('round:started', handleGameStarted); // E este também
-
-                navigate(`/game/${salaId}`); // Navega para a tela do jogo
+                socket.off('round:ready', handleGameStarted); 
+                socket.off('round:started', handleGameStarted); 
+                navigate(`/game/${salaId}`); 
             }
        };
-
-       // Registra os listeners
        socket.on('room:players_updated', handlePlayersUpdate);
        socket.on('room:abandoned', handleRoomAbandoned);
-       socket.on('round:ready', handleGameStarted); // Ouve 'round:ready'
-       socket.on('round:started', handleGameStarted); // Ouve 'round:started' também por segurança
-       
-       // Entra na sala do socket (caso não tenha entrado antes ou reconectou)
-       socket.emit('join-room', String(salaId)); //
+       socket.on('round:ready', handleGameStarted); 
+       socket.on('round:started', handleGameStarted); 
+       socket.emit('join-room', String(salaId)); 
        console.log(`Socket join-room emitido para sala ${salaId}`);
-
-        fetchSalaState(true); // Busca inicial
-        intervalId = setInterval(fetchSalaState, 5000); // Polling como fallback (aumentado para 5s)
-
-        // Função de Limpeza
-        return () => { //
-            console.log("Limpando WaitingRoomScreen"); //
-            isMounted = false; //
-            if (intervalId) clearInterval(intervalId); //
-           // Desregistra os listeners
+        fetchSalaState(true); 
+        intervalId = setInterval(fetchSalaState, 5000); 
+        return () => { 
+            console.log("Limpando WaitingRoomScreen"); 
+            isMounted = false; 
+            if (intervalId) clearInterval(intervalId); 
            socket.off('room:players_updated', handlePlayersUpdate);
            socket.off('room:abandoned', handleRoomAbandoned);
-           socket.off('round:ready', handleGameStarted); // Garante desregistro
-           socket.off('round:started', handleGameStarted); // Garante desregistro
+           socket.off('round:ready', handleGameStarted); 
+           socket.off('round:started', handleGameStarted); 
         };
-    }, [salaId, navigate]); //
+    }, [salaId, navigate]); 
 
-    // Estado de Carregamento Inicial
-    if (loading || !sala) { //
-        return ( //
-             <div className="text-white text-center p-10 flex flex-col items-center justify-center gap-4"> {/* */}
-               <Loader2 className="animate-spin h-10 w-10 text-blue-400" /> {/* */}
-               <p>A entrar na sala #{salaId}...</p> {/* */}
-               {/* Exibe o erro de "tentando de novo" aqui */}
-               {error && <p className="text-yellow-400 mt-2">{error}</p>} {/* */}
+    // --- Renderização com Alterações ---
+    if (loading || !sala) { 
+        return ( 
+             <div className="text-white text-center p-10 flex flex-col items-center justify-center gap-4 font-cyber">
+               <Loader2 className="animate-spin h-10 w-10 text-secondary" /> 
+               <p>Acessando Nó #{salaId}...</p> 
+               {error && <p className="text-warning mt-2">{error}</p>} 
              </div>
         );
     }
 
-    // --- Renderização Principal (sem alteração) ---
-    return ( //
-        <div className="p-4 md:p-8 text-white max-w-2xl mx-auto relative"> {/* */}
-            {/* Botão Sair */}
-            <button
-                onClick={handleLeaveRoom} //
-                disabled={leaving} // Desabilita enquanto está saindo
-                className="absolute top-4 left-4 md:top-6 md:left-6 text-gray-400 hover:text-white transition-colors flex items-center gap-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed" //
-                title="Sair da sala" //
-            >
-                {leaving ? <Loader2 size={16} className="animate-spin" /> : <ArrowLeft size={16} />} {/* */}
-                {leaving ? 'Saindo...' : 'Voltar ao Lobby'} {/* */}
-            </button>
+    return ( 
+        <div className="relative flex flex-col items-center justify-center min-h-[calc(100vh-120px)] text-white p-4 font-cyber [perspective:1000px]">
+            <PixelBlast className="relative inset-0 w-full h-full z-0" />
+            <div className="absolute z-10 w-full max-w-2xl mx-auto">
+                {/* Botão Sair */}
+                <button
+                    onClick={handleLeaveRoom} 
+                    disabled={leaving} 
+                    className="absolute top-4 left-4 md:top-6 md:left-6 text-text-muted hover:text-primary transition-colors flex items-center gap-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed" 
+                    title="Sair da sala" 
+                >
+                    {leaving ? <Loader2 size={16} className="animate-spin" /> : <ArrowLeft size={16} />} 
+                    {leaving ? 'Desconectando...' : 'Voltar ao Lobby'} 
+                </button>
 
-            {/* Cabeçalho da Sala */}
-             <div className="text-center mb-8 pt-8 md:pt-4"> {/* */}
-                <h1 className="text-3xl md:text-4xl font-bold mb-2">Sala: {sala.nome_sala}</h1> {/* */}
+                {/* Cabeçalho da Sala */}
+                 <div className="text-center mb-8 pt-8 md:pt-4">
+                    <h1 className="text-3xl md:text-4xl font-bold mb-2 text-accent">{sala.nome_sala}</h1> 
 
-                {/* ID da Sala para compartilhar */}
-                <div className="flex items-center justify-center gap-2 mt-3 mb-2"> {/* */}
-                    <span className="text-gray-400">ID da Sala:</span> {/* */}
-                    <span className="text-2xl font-mono text-cyan-400 bg-gray-700 px-3 py-1 rounded"> {/* */}
-                        {salaId} {/* */}
-                    </span>
-                    <button onClick={copyToClipboard} title="Copiar ID" className="text-gray-400 hover:text-cyan-300 transition-colors p-1"> {/* */}
-                        <ClipboardCopy size={20}/> {/* */}
-                    </button>
-                </div>
-                {copySuccess && <p className="text-xs text-green-400 h-4">{copySuccess}</p>} {/* */}
-
-
-                <p className="text-gray-400 mt-2 text-sm">Criada por: {sala.jogador?.nome_de_usuario || 'Desconhecido'}</p> {/* */}
-                {/* EXIBE OS NOVOS STATUS */}
-                 <p className={`mt-1 text-sm font-semibold ${
-                      sala.status === 'waiting' ? 'text-yellow-400'
-                    : sala.status === 'in_progress' ? 'text-green-400'
-                    : sala.status === 'terminada' ? 'text-blue-400'
-                    : sala.status === 'abandonada' ? 'text-red-500'
-                    : 'text-gray-400' // Outros status
-                 }`}> {/* */}
-                    Status: {
-                        sala.status === 'waiting' ? 'Aguardando Jogadores...'
-                      : sala.status === 'in_progress' ? 'Em Jogo'
-                      : sala.status === 'terminada' ? 'Partida Terminada'
-                      : sala.status === 'abandonada' ? 'Sala Abandonada'
-                      : sala.status // Mostra o status literal se for outro
-                    } {/* */}
-                 </p>
-                 {/* Exibe o erro do polling (se houver) */}
-                 {error && <p className="text-red-400 mt-2 text-sm">{error}</p>} {/* */}
-            </div>
-
-            {/* Lista de Jogadores (agora ocupa a largura total) */}
-            <div className="bg-gray-800 p-4 md:p-6 rounded-lg shadow-md mb-8"> {/* */}
-                <h2 className="text-xl md:text-2xl font-semibold mb-4 flex items-center gap-2"> {/* */}
-                   <Users size={24} /> Jogadores na Sala ({sala.jogadores?.length || 0}) {/* */}
-                </h2>
-                <ul className="space-y-2 max-h-60 overflow-y-auto pr-2"> {/* */}
-                    {(sala.jogadores || []).map((nome, index) => ( //
-                       <li key={index} className="text-base md:text-lg bg-gray-700/50 px-3 py-1.5 rounded flex items-center gap-2"> {/* */}
-                          <span className={`h-2 w-2 rounded-full ${index === 0 ? 'bg-yellow-400' : 'bg-blue-400'}`}></span> {/* */}
-                          {nome} {/* */}
-                          {index === 0 && <span className="text-xs text-yellow-400 font-semibold ml-auto">(Criador)</span>} {/* */}
-                       </li>
-                    ))}
-                     {/* Mensagem se não houver jogadores */}
-                     {sala.jogadores?.length === 0 && !loading && <li className="text-gray-500 italic">Nenhum jogador ainda.</li>} {/* */}
-                </ul>
-            </div>
-
-            {/* Botão de Iniciar Partida ou Mensagem de Espera */}
-            {/* Só mostra botões/mensagens se a sala estiver 'waiting' */}
-            {sala.status === 'waiting' && ( //
-                <div className="mt-8 md:mt-6 text-center"> {/* */}
-                    {/* Botão Iniciar para o criador */}
-                    {sala.is_creator && ( //
-                        <button
-                            onClick={handleStartGame} //
-                            disabled={loading || sala.jogadores?.length < 2} // Desabilita se carregando OU se tiver menos de 2 jogadores
-                            className="px-8 py-3 md:px-10 md:py-4 bg-green-600 rounded-lg font-bold text-lg md:text-xl hover:bg-green-700 disabled:bg-gray-500 disabled:cursor-not-allowed transition-transform hover:scale-105 flex items-center justify-center gap-2 mx-auto" //
-                            title={sala.jogadores?.length < 2 ? "Precisa de pelo menos 2 jogadores para iniciar" : "Iniciar a partida"} //
-                        >
-                            {loading && !leaving ? <Loader2 className="animate-spin" /> : <Play />} {/* Garante que não mostra loading se estiver saindo */} {/* */}
-                            {loading && !leaving ? 'A Iniciar...' : 'Iniciar Partida'} {/* */}
+                    {/* ID da Sala para compartilhar (estilizado) */}
+                    <div className="flex items-center justify-center gap-2 mt-3 mb-2"> 
+                        <span className="text-text-muted">ID do Nó:</span> 
+                        <span className="text-2xl font-mono text-warning bg-black/50 px-3 py-1 rounded border border-dashed border-warning/50"> 
+                            {salaId} 
+                        </span>
+                        <button onClick={copyToClipboard} title="Copiar ID" className="text-text-muted hover:text-warning transition-colors p-1"> 
+                            <ClipboardCopy size={20}/> 
                         </button>
-                    )}
-                    {/* Mensagem de espera para não criadores */}
-                    {!sala.is_creator && ( //
-                        <p className="text-base md:text-lg text-gray-400 flex items-center justify-center gap-2"> {/* */}
-                           <Loader2 className="animate-spin h-5 w-5"/> A aguardar que o líder <span className="font-semibold text-yellow-400">{sala.jogador?.nome_de_usuario || ''}</span> inicie a partida... {/* */}
-                        </p>
-                    )}
-                     {/* Mensagem para o criador quando não há jogadores suficientes */}
-                    {sala.is_creator && sala.jogadores?.length < 2 && ( //
-                           <p className="text-sm text-yellow-500 mt-2">É necessário pelo menos 2 jogadores para iniciar a partida.</p> //
-                    )}
+                    </div>
+                    {copySuccess && <p className="text-xs text-accent h-4">{copySuccess}</p>} 
+
+                    <p className="text-text-muted mt-2 text-sm">Host: {sala.jogador?.nome_de_usuario || 'Desconhecido'}</p> 
+                     <p className={`mt-1 text-sm font-semibold ${
+                          sala.status === 'waiting' ? 'text-warning'
+                        : sala.status === 'in_progress' ? 'text-accent'
+                        : sala.status === 'terminada' ? 'text-secondary'
+                        : sala.status === 'abandonada' ? 'text-primary'
+                        : 'text-text-muted' 
+                     }`}> 
+                        Status: {
+                            sala.status === 'waiting' ? 'Aguardando Conexões...'
+                          : sala.status === 'in_progress' ? 'Em Jogo'
+                          : sala.status === 'terminada' ? 'Partida Terminada'
+                          : sala.status === 'abandonada' ? 'Nó Abandonado'
+                          : sala.status 
+                        } 
+                     </p>
+                     {error && <p className="text-red-400 mt-2 text-sm">{error}</p>} 
                 </div>
-            )}
-             {/* Mensagem se a partida já começou (caso raro, pois deveria ter navegado) */}
-             {sala.status !== 'waiting' && !loading && sala.status !== 'abandonada' && sala.status !== 'terminada' &&( //
-                  <p className="text-base md:text-lg text-blue-400 text-center">Partida em andamento ou finalizada...</p> //
-             )}
-             {/* Mensagem para sala abandonada/terminada */}
-              {(sala.status === 'abandonada' || sala.status === 'terminada') && !loading && (
-                    <p className={`text-base md:text-lg text-center font-semibold ${sala.status === 'abandonada' ? 'text-red-500' : 'text-blue-400'}`}>
-                       Esta sala foi {sala.status}.
-                    </p>
-              )}
+
+                {/* Lista de Jogadores (com augmented-ui) */}
+                <div 
+                  className="bg-bg-secondary p-4 md:p-6 mb-8 [transform-style:preserve-3d]"
+                  data-augmented-ui="tl-clip tr-clip br-clip bl-clip border"
+                >
+                    <h2 className="text-xl md:text-2xl font-semibold mb-4 flex items-center gap-2 text-secondary [transform:translateZ(10px)]"> 
+                       <Users size={24} /> Conexões ({sala.jogadores?.length || 0}) 
+                    </h2>
+                    <ul className="space-y-2 max-h-60 overflow-y-auto pr-2 [transform:translateZ(10px)]"> 
+                        {(sala.jogadores || []).map((nome, index) => ( 
+                           <li key={index} className="text-base md:text-lg bg-bg-input px-3 py-1.5 rounded flex items-center gap-2 border border-transparent"> 
+                              <span className={`h-2 w-2 rounded-full ${index === 0 ? 'bg-warning shadow-glow-warning' : 'bg-secondary shadow-glow-secondary'}`}></span> 
+                              {nome} 
+                              {index === 0 && <span className="text-xs text-warning font-semibold ml-auto">(Host)</span>} 
+                           </li>
+                        ))}
+                         {sala.jogadores?.length === 0 && !loading && <li className="text-text-muted/70 italic">Nenhuma conexão ainda.</li>} 
+                    </ul>
+                </div>
+
+                {/* Botão de Iniciar Partida ou Mensagem de Espera */}
+                {sala.status === 'waiting' && ( 
+                    <div className="mt-8 md:mt-6 text-center [transform-style:preserve-3d]">
+                        {sala.is_creator && ( 
+                            <button
+                                onClick={handleStartGame} 
+                                disabled={loading || sala.jogadores?.length < 2} 
+                                className="px-8 py-3 md:px-10 md:py-4 bg-accent text-black rounded-lg font-bold text-lg md:text-xl 
+                                           hover:bg-accent/80 disabled:bg-gray-500 disabled:cursor-not-allowed 
+                                           transition-all hover:scale-105 hover:[transform:translateZ(15px)] active:[transform:translateZ(5px)]
+                                           flex items-center justify-center gap-2 mx-auto shadow-lg shadow-accent/20" 
+                                title={sala.jogadores?.length < 2 ? "Precisa de pelo menos 2 conexões para iniciar" : "Iniciar a partida"} 
+                                data-augmented-ui="tl-scoop tr-scoop br-scoop bl-scoop"
+                            >
+                                {loading && !leaving ? <Loader2 className="animate-spin" /> : <Play />} 
+                                {loading && !leaving ? 'Iniciando...' : 'Iniciar Partida'} 
+                            </button>
+                        )}
+                        {!sala.is_creator && ( 
+                            <p className="text-base md:text-lg text-text-muted flex items-center justify-center gap-2"> 
+                               <Loader2 className="animate-spin h-5 w-5"/> Aguardando Host <span className="font-semibold text-warning">{sala.jogador?.nome_de_usuario || ''}</span> iniciar...
+                            </p>
+                        )}
+                        {sala.is_creator && sala.jogadores?.length < 2 && ( 
+                               <p className="text-sm text-warning/80 mt-2">Mínimo de 2 conexões para iniciar.</p> 
+                        )}
+                    </div>
+                )}
+                 {sala.status !== 'waiting' && !loading && sala.status !== 'abandonada' && sala.status !== 'terminada' &&( 
+                      <p className="text-base md:text-lg text-secondary text-center">Partida em andamento ou finalizada...</p> 
+                 )}
+                  {(sala.status === 'abandonada' || sala.status === 'terminada') && !loading && (
+                        <p className={`text-base md:text-lg text-center font-semibold ${sala.status === 'abandonada' ? 'text-primary' : 'text-secondary'}`}>
+                           Este Nó foi {sala.status}.
+                        </p>
+                  )}
+            </div>
         </div>
     );
 }
+
 
 export default WaitingRoomScreen;

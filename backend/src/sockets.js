@@ -2,7 +2,7 @@
 import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { supa } from '../services/supabase.js'; //
-import { endRoundAndScore, getNextRoundForSala, getJogadoresDaSala } from '../services/game.js'; //
+import { endRoundAndScore, getNextRoundForSala, getJogadoresDaSala, getRoundResults } from '../services/game.js'; //
 
 const JWT_SECRET = process.env.JWT_SECRET || 'developer_secret_key'; //
 
@@ -42,6 +42,70 @@ function getAndClearRevealRequests(salaId, roundId) { //
         activeRevealRequests.delete(salaId); // Limpa o mapa da sala se vazio
     }
     return requests || new Set(); //
+}
+
+// ===== Armazenamento para palavras puladas (SKIP_WORD) =====
+// Formato: Map<salaId, Map<roundId, Set<string>>> onde string = "jogadorId-temaNome"
+const skippedWords = new Map(); //
+
+function addSkippedWord(salaId, roundId, jogadorId, temaNome) { //
+    const key = `${salaId}-${roundId}`; //
+    if (!skippedWords.has(key)) { //
+        skippedWords.set(key, new Set()); //
+    }
+    skippedWords.get(key).add(`${jogadorId}-${temaNome}`); //
+    console.log(`[SKIP_WORD] Jogador ${jogadorId} pulou palavra ${temaNome} na rodada ${roundId}`); //
+}
+
+function getSkippedWords(salaId, roundId) { //
+    const key = `${salaId}-${roundId}`; //
+    const words = skippedWords.get(key); //
+    return words || new Set(); //
+}
+
+function clearSkippedWords(salaId, roundId) { //
+    const key = `${salaId}-${roundId}`; //
+    skippedWords.delete(key); //
+}
+
+function isWordSkipped(salaId, roundId, jogadorId, temaNome) { //
+    const key = `${salaId}-${roundId}`; //
+    const words = skippedWords.get(key); //
+    if (!words) return false; //
+    return words.has(`${jogadorId}-${temaNome}`); //
+}
+// ======================================================================
+
+// ===== Armazenamento para palavras desconsideradas do oponente (DISREGARD_OPPONENT_WORD) =====
+// Formato: Map<salaId, Map<roundId, Set<string>>> onde string = "jogadorId-temaNome"
+// Diferente de SKIP_WORD, aqui o jogador NÃO ganha pontos pela palavra desconsiderada
+const disregardedOpponentWords = new Map(); //
+
+function addDisregardedOpponentWord(salaId, roundId, targetJogadorId, temaNome) { //
+    const key = `${salaId}-${roundId}`; //
+    if (!disregardedOpponentWords.has(key)) { //
+        disregardedOpponentWords.set(key, new Set()); //
+    }
+    disregardedOpponentWords.get(key).add(`${targetJogadorId}-${temaNome}`); //
+    console.log(`[DISREGARD_OPPONENT_WORD] Palavra "${temaNome}" do jogador ${targetJogadorId} foi desconsiderada na rodada ${roundId}`); //
+}
+
+function getDisregardedOpponentWords(salaId, roundId) { //
+    const key = `${salaId}-${roundId}`; //
+    const words = disregardedOpponentWords.get(key); //
+    return words || new Set(); //
+}
+
+function clearDisregardedOpponentWords(salaId, roundId) { //
+    const key = `${salaId}-${roundId}`; //
+    disregardedOpponentWords.delete(key); //
+}
+
+function isOpponentWordDisregarded(salaId, roundId, jogadorId, temaNome) { //
+    const key = `${salaId}-${roundId}`; //
+    const words = disregardedOpponentWords.get(key); //
+    if (!words) return false; //
+    return words.has(`${jogadorId}-${temaNome}`); //
 }
 // ======================================================================
 
@@ -160,7 +224,17 @@ export function scheduleRoundCountdown({ salaId, roundId, duration = 20 }) { //
         // Ele fazia o timer se auto-bloquear.
         // --- FIM DA CORREÇÃO ---
 
-        const payload = await endRoundAndScore({ salaId, roundId }); //
+        const payload = await endRoundAndScore({ 
+          salaId, 
+          roundId, 
+          skippedWordsSet: getSkippedWords(salaId, roundId),
+          disregardedOpponentWordsSet: getDisregardedOpponentWords(salaId, roundId)
+        }); //
+
+        // Limpa as palavras puladas após pontuar
+        clearSkippedWords(salaId, roundId);
+        // Limpa as palavras desconsideradas do oponente após pontuar
+        clearDisregardedOpponentWords(salaId, roundId);
 
         // --- LÓGICA DE REVELAÇÃO (APÓS PONTUAÇÃO) ---
         const revealRequesters = getAndClearRevealRequests(salaId, roundId); //
@@ -211,13 +285,23 @@ export function scheduleRoundCountdown({ salaId, roundId, duration = 20 }) { //
 
         const next = await getNextRoundForSala({ salaId, afterRoundId: roundId }); //
         if (next) { //
-            // Código para iniciar a próxima rodada
-             console.log(`[TIMER->NEXT_ROUND] Próxima rodada ${next.rodada_id} para sala ${salaId}`);
-             // Atualiza status da próxima rodada para 'in_progress'
-             await supa.from('rodada').update({ status: 'in_progress' }).eq('rodada_id', next.rodada_id); //
-             io.to(salaId).emit('round:ready', next); //
-             io.to(salaId).emit('round:started', { roundId: next.rodada_id, duration: duration }); // Usar a mesma duração
-             scheduleRoundCountdown({ salaId: salaId, roundId: next.rodada_id, duration: duration }); //
+            // Aguarda 10 segundos antes de iniciar a próxima rodada
+            console.log(`[TIMER->NEXT_ROUND] Aguardando 10 segundos antes de iniciar próxima rodada ${next.rodada_id} para sala ${salaId}`);
+            setTimeout(async () => {
+                // Verifica se ainda existe próxima rodada (pode ter mudado durante o delay)
+                const nextCheck = await getNextRoundForSala({ salaId, afterRoundId: roundId });
+                if (!nextCheck || nextCheck.rodada_id !== next.rodada_id) {
+                    console.log(`[TIMER->NEXT_ROUND] Próxima rodada mudou durante o delay, abortando.`);
+                    return;
+                }
+                // Código para iniciar a próxima rodada
+                console.log(`[TIMER->NEXT_ROUND] Iniciando próxima rodada ${next.rodada_id} para sala ${salaId}`);
+                // Atualiza status da próxima rodada para 'in_progress'
+                await supa.from('rodada').update({ status: 'in_progress' }).eq('rodada_id', next.rodada_id); //
+                io.to(salaId).emit('round:ready', next); //
+                io.to(salaId).emit('round:started', { roundId: next.rodada_id, duration: duration }); // Usar a mesma duração
+                scheduleRoundCountdown({ salaId: salaId, roundId: next.rodada_id, duration: duration }); //
+            }, 10000); // Delay de 10 segundos (10000ms)
         } else { //
           // --- LÓGICA DE FIM DE PARTIDA E MOEDAS (TIMER) ---
           const winnerInfo = computeWinner(payload.totais); //
@@ -305,8 +389,35 @@ export function initSockets(httpServer) { //
         const stoppedBy = by || socket.data.jogador_id; //
 
         if (!salaId || !roundId) { /* Não fazer nada se IDs inválidos */ return; } //
+        
         // Verifica se JÁ FOI PONTUADO antes de fazer qualquer coisa
-        if (alreadyScored(salaId, roundId)) { return; } //
+        if (alreadyScored(salaId, roundId)) {
+            console.warn(`[STOP] Rodada ${roundId} já foi pontuada. Buscando resultados existentes para mostrar placar.`);
+            // Busca os resultados já calculados e os envia
+            const payload = await getRoundResults({ salaId, roundId });
+            io.to(salaId).emit('round:end', payload);
+            
+            // Continua com a lógica de próxima rodada
+            const next = await getNextRoundForSala({ salaId, afterRoundId: roundId });
+            if (next) {
+                console.log(`[STOP->NEXT_ROUND] Aguardando 10 segundos antes de iniciar próxima rodada ${next.rodada_id} para sala ${salaId}`);
+                setTimeout(async () => {
+                    const nextCheck = await getNextRoundForSala({ salaId, afterRoundId: roundId });
+                    if (!nextCheck || nextCheck.rodada_id !== next.rodada_id) {
+                        console.log(`[STOP->NEXT_ROUND] Próxima rodada mudou durante o delay, abortando.`);
+                        return;
+                    }
+                    console.log(`[STOP->NEXT_ROUND] Iniciando próxima rodada ${next.rodada_id} para sala ${salaId}`);
+                    await supa.from('rodada').update({ status: 'in_progress' }).eq('rodada_id', next.rodada_id);
+                    io.to(salaId).emit('round:ready', next);
+                    const qTempo = await supa.from('rodada').select('tempo:tempo_id(valor)').eq('rodada_id', roundId).single();
+                    const duration = qTempo.data?.tempo?.valor || 20;
+                    io.to(salaId).emit('round:started', { roundId: next.rodada_id, duration: duration });
+                    scheduleRoundCountdown({ salaId: salaId, roundId: next.rodada_id, duration: duration });
+                }, 10000);
+            }
+            return; // Retorna aqui para não processar novamente
+        }
 
         console.log(`[CLICK STOP] sala=${salaId} round=${roundId} by=${stoppedBy}`); //
         io.to(salaId).emit('round:stopping', { roundId, by: stoppedBy }); //
@@ -317,11 +428,45 @@ export function initSockets(httpServer) { //
 
         // Re-verifica se pontuou durante o sleep (caso MUITO raro de concorrência extrema)
          if (scoredRounds.has(`${salaId}-${roundId}`)) {
-             console.warn(`[STOP] Rodada ${roundId} pontuada durante GRACE_MS (concorrência?). Abortando pontuação do stop.`);
-             return;
+             console.warn(`[STOP] Rodada ${roundId} já foi pontuada durante GRACE_MS (concorrência?). Buscando resultados existentes.`);
+             // Busca os resultados já calculados e os envia mesmo assim
+             const payload = await getRoundResults({ salaId, roundId });
+             io.to(salaId).emit('round:end', payload);
+             
+             // Continua com a lógica de próxima rodada
+             const next = await getNextRoundForSala({ salaId, afterRoundId: roundId });
+             if (next) {
+                 // Aguarda 10 segundos antes de iniciar a próxima rodada
+                 console.log(`[STOP->NEXT_ROUND] Aguardando 10 segundos antes de iniciar próxima rodada ${next.rodada_id} para sala ${salaId}`);
+                 setTimeout(async () => {
+                     const nextCheck = await getNextRoundForSala({ salaId, afterRoundId: roundId });
+                     if (!nextCheck || nextCheck.rodada_id !== next.rodada_id) {
+                         console.log(`[STOP->NEXT_ROUND] Próxima rodada mudou durante o delay, abortando.`);
+                         return;
+                     }
+                     console.log(`[STOP->NEXT_ROUND] Iniciando próxima rodada ${next.rodada_id} para sala ${salaId}`);
+                     await supa.from('rodada').update({ status: 'in_progress' }).eq('rodada_id', next.rodada_id);
+                     io.to(salaId).emit('round:ready', next);
+                     const qTempo = await supa.from('rodada').select('tempo:tempo_id(valor)').eq('rodada_id', roundId).single();
+                     const duration = qTempo.data?.tempo?.valor || 20;
+                     io.to(salaId).emit('round:started', { roundId: next.rodada_id, duration: duration });
+                     scheduleRoundCountdown({ salaId: salaId, roundId: next.rodada_id, duration: duration });
+                 }, 10000);
+             }
+             return; // Retorna aqui para não processar novamente
          }
 
-        const payload = await endRoundAndScore({ salaId, roundId }); //
+        const payload = await endRoundAndScore({ 
+          salaId, 
+          roundId, 
+          skippedWordsSet: getSkippedWords(salaId, roundId),
+          disregardedOpponentWordsSet: getDisregardedOpponentWords(salaId, roundId)
+        }); //
+
+        // Limpa as palavras puladas após pontuar
+        clearSkippedWords(salaId, roundId);
+        // Limpa as palavras desconsideradas do oponente após pontuar
+        clearDisregardedOpponentWords(salaId, roundId);
 
         // --- LÓGICA DE REVELAÇÃO (APÓS PONTUAÇÃO - igual ao timer) ---
          const revealRequesters = getAndClearRevealRequests(salaId, roundId); //
@@ -369,15 +514,25 @@ export function initSockets(httpServer) { //
 
         const next = await getNextRoundForSala({ salaId, afterRoundId: roundId }); //
         if (next) { //
-            // Código para iniciar a próxima rodada
-            console.log(`[STOP->NEXT_ROUND] Próxima rodada ${next.rodada_id} para sala ${salaId}`);
-            await supa.from('rodada').update({ status: 'in_progress' }).eq('rodada_id', next.rodada_id); //
-            io.to(salaId).emit('round:ready', next); //
-            // Precisa pegar a duração original da rodada anterior ou ter um padrão
-            const qTempo = await supa.from('rodada').select('tempo:tempo_id(valor)').eq('rodada_id', roundId).single(); //
-            const duration = qTempo.data?.tempo?.valor || 20; // Default 20s
-            io.to(salaId).emit('round:started', { roundId: next.rodada_id, duration: duration }); //
-            scheduleRoundCountdown({ salaId: salaId, roundId: next.rodada_id, duration: duration }); //
+            // Aguarda 10 segundos antes de iniciar a próxima rodada
+            console.log(`[STOP->NEXT_ROUND] Aguardando 10 segundos antes de iniciar próxima rodada ${next.rodada_id} para sala ${salaId}`);
+            setTimeout(async () => {
+                // Verifica se ainda existe próxima rodada (pode ter mudado durante o delay)
+                const nextCheck = await getNextRoundForSala({ salaId, afterRoundId: roundId });
+                if (!nextCheck || nextCheck.rodada_id !== next.rodada_id) {
+                    console.log(`[STOP->NEXT_ROUND] Próxima rodada mudou durante o delay, abortando.`);
+                    return;
+                }
+                // Código para iniciar a próxima rodada
+                console.log(`[STOP->NEXT_ROUND] Iniciando próxima rodada ${next.rodada_id} para sala ${salaId}`);
+                await supa.from('rodada').update({ status: 'in_progress' }).eq('rodada_id', next.rodada_id); //
+                io.to(salaId).emit('round:ready', next); //
+                // Precisa pegar a duração original da rodada anterior ou ter um padrão
+                const qTempo = await supa.from('rodada').select('tempo:tempo_id(valor)').eq('rodada_id', roundId).single(); //
+                const duration = qTempo.data?.tempo?.valor || 20; // Default 20s
+                io.to(salaId).emit('round:started', { roundId: next.rodada_id, duration: duration }); //
+                scheduleRoundCountdown({ salaId: salaId, roundId: next.rodada_id, duration: duration }); //
+            }, 10000); // Delay de 10 segundos (10000ms)
         } else { //
           // --- LÓGICA DE FIM DE PARTIDA E MOEDAS (STOP) ---
           const winnerInfo = computeWinner(payload.totais); //
@@ -416,7 +571,7 @@ export function initSockets(httpServer) { //
       }
     });
 
-    socket.on('powerup:use', async ({ powerUpId, targetPlayerId = null }) => { //
+    socket.on('powerup:use', async ({ powerUpId, targetPlayerId = null, targetTemaNome = null }) => { //
         const salaId = socket.data.salaId; //
         const usuarioJogadorId = socket.data.jogador_id; //
         const currentRoundId = roomTimers.get(salaId)?.roundId; //
@@ -465,9 +620,10 @@ export function initSockets(httpServer) { //
 
           switch (efeito) { //
             case 'BLUR_OPPONENT_SCREEN_5S': //
-              // Emite para todos os outros na sala
-              socket.to(salaId).emit('effect:jumpscare', { attackerId: usuarioJogadorId /*, image, sound */ }); //
-              socket.emit('powerup:ack', { codigo: efeito, message: 'Jumpscare enviado!' }); // Confirma para quem usou //
+            case 'JUMPSCARE': // Alias para o mesmo efeito
+              // Emite para todos os outros na sala com duração de 3 segundos
+              socket.to(salaId).emit('effect:jumpscare', { attackerId: usuarioJogadorId, duration: 3 /*, image, sound */ }); //
+              socket.emit('powerup:ack', { codigo: efeito, message: 'Jumpscare enviado! Oponente ficará bloqueado por 3s' }); // Confirma para quem usou //
               break;
             case 'SKIP_OWN_CATEGORY': //
               // Emite apenas para o socket que usou o power-up
@@ -556,6 +712,115 @@ export function initSockets(httpServer) { //
               } catch (err) {
                 console.error('[CLEAR_ANSWERS] Erro:', err);
                 socket.emit('powerup:error', { message: 'Erro ao apagar campos do adversário.' });
+              }
+              break;
+            case 'SKIP_WORD': //
+              // Pular uma palavra e ganhar os pontos automaticamente
+              try {
+                if (!targetTemaNome) {
+                  socket.emit('powerup:error', { message: 'É necessário especificar qual palavra pular.' });
+                  return;
+                }
+
+                // Busca o nome do tema da rodada
+                const { data: temasRodada, error: temasError } = await supa
+                  .from('rodada_tema')
+                  .select('tema:tema_id(tema_nome)')
+                  .eq('rodada_id', currentRoundId);
+
+                if (temasError) throw temasError;
+                const temasValidos = (temasRodada || []).map(t => t.tema.tema_nome);
+
+                // Verifica se o tema informado é válido para esta rodada
+                if (!temasValidos.includes(targetTemaNome)) {
+                  socket.emit('powerup:error', { message: 'Tema inválido para esta rodada.' });
+                  return;
+                }
+
+                // Marca a palavra como pulada
+                addSkippedWord(salaId, currentRoundId, usuarioJogadorId, targetTemaNome);
+                socket.emit('powerup:ack', { codigo: efeito, message: `Palavra "${targetTemaNome}" foi pulada! Você ganhará pontos automaticamente.` });
+                console.log(`[SKIP_WORD] Jogador ${usuarioJogadorId} pulou palavra ${targetTemaNome} na rodada ${currentRoundId}`);
+              } catch (err) {
+                console.error('[SKIP_WORD] Erro:', err);
+                socket.emit('powerup:error', { message: 'Erro ao pular palavra.' });
+              }
+              break;
+            case 'DISREGARD_OPPONENT_WORD': //
+            case 'SKIP_OPPONENT_CATEGORY': // Alias para compatibilidade
+              // Ativa o powerup para permitir escolher qual categoria desconsiderar do oponente
+              // Similar ao SKIP_OWN_CATEGORY, mas afeta o oponente
+              try {
+                // Verifica se há oponentes
+                const todosJogadores = await getJogadoresDaSala(salaId);
+                const oponentesIds = todosJogadores.filter(id => id !== usuarioJogadorId);
+                
+                if (oponentesIds.length === 0) {
+                  socket.emit('powerup:error', { message: 'Não há oponentes na sala para afetar.' });
+                  return;
+                }
+
+                // Se targetTemaNome foi fornecido, já aplica diretamente
+                if (targetTemaNome) {
+                  // Se targetPlayerId foi especificado, usa ele; senão seleciona aleatório
+                  let targetId = targetPlayerId ? Number(targetPlayerId) : oponentesIds[Math.floor(Math.random() * oponentesIds.length)];
+                  
+                  // Verifica se o alvo é válido
+                  if (!oponentesIds.includes(targetId)) {
+                    targetId = oponentesIds[0]; // Fallback para primeiro oponente
+                  }
+
+                  // Busca o nome do tema da rodada
+                  const { data: temasRodada, error: temasError } = await supa
+                    .from('rodada_tema')
+                    .select('tema:tema_id(tema_nome)')
+                    .eq('rodada_id', currentRoundId);
+
+                  if (temasError) throw temasError;
+                  const temasValidos = (temasRodada || []).map(t => t.tema.tema_nome);
+
+                  // Verifica se o tema informado é válido para esta rodada
+                  if (!temasValidos.includes(targetTemaNome)) {
+                    socket.emit('powerup:error', { message: 'Tema inválido para esta rodada.' });
+                    return;
+                  }
+
+                  // Marca a palavra do oponente como desconsiderada
+                  addDisregardedOpponentWord(salaId, currentRoundId, targetId, targetTemaNome);
+                  
+                  // Notifica o oponente que sua categoria foi bloqueada
+                  const targetSocketId = await getSocketIdByPlayerId(targetId);
+                  if (targetSocketId) {
+                    // Busca o tema_id para enviar ao frontend
+                    const { data: temasRodadaFull, error: temasErrFull } = await supa
+                      .from('rodada_tema')
+                      .select('tema_id, tema:tema_id(tema_nome)')
+                      .eq('rodada_id', currentRoundId);
+                    
+                    let temaId = null;
+                    if (!temasErrFull && temasRodadaFull) {
+                      const temaFound = temasRodadaFull.find(t => t.tema?.tema_nome === targetTemaNome);
+                      if (temaFound) temaId = temaFound.tema_id;
+                    }
+                    
+                    if (temaId) {
+                      io.to(targetSocketId).emit('effect:category_disregarded', { 
+                        temaId: temaId, 
+                        temaNome: targetTemaNome,
+                        attackerId: usuarioJogadorId 
+                      });
+                    }
+                  }
+                  
+                  socket.emit('powerup:ack', { codigo: efeito, message: `Palavra "${targetTemaNome}" do oponente foi desconsiderada! Ele não ganhará pontos por ela.` });
+                  console.log(`[DISREGARD_OPPONENT_WORD] Jogador ${usuarioJogadorId} desconsiderou palavra "${targetTemaNome}" do jogador ${targetId} na rodada ${currentRoundId}`);
+                } else {
+                  // Ativa o modo de escolha (similar ao SKIP_OWN_CATEGORY)
+                  socket.emit('effect:enable_skip_opponent', { powerUpId: powerUpId });
+                }
+              } catch (err) {
+                console.error('[DISREGARD_OPPONENT_WORD] Erro:', err);
+                socket.emit('powerup:error', { message: 'Erro ao ativar desconsideração de palavra do oponente.' });
               }
               break;
             default: //

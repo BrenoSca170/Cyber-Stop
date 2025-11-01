@@ -1,35 +1,47 @@
-// frontend/src/App.jsx (Atualizado)
-import { Outlet, Link } from 'react-router-dom'
-import { Home, LogOut } from 'lucide-react' // Ajustar ícones
+import { Outlet } from 'react-router-dom';
+import { Toaster } from 'sonner';
 
-export default function App() {
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('meuJogadorId');
-    sessionStorage.removeItem('meuJogadorId'); // Limpa ambos
-    location.href='/login'; // Redireciona para login (força recarregamento)
-  };
+// 1. Importar o componente TargetCursor que você criou
+import TargetCursor from './components/TargetCursor';
+// 2. IMPORTAR O HEADER DE VOLTA
+import Header from './components/Header'; // Assumindo que está em /components/Header.jsx
 
+function App() {
   return (
-    <div className="bg-gray-900 min-h-screen text-white">
-      <nav className="bg-gray-800 p-4 flex justify-between items-center shadow-lg sticky top-0 z-20">
-        {/* Links removidos, pode adicionar um link para Home se desejar */}
-        <Link to="/" className="hover:text-blue-400 flex items-center gap-1 font-semibold text-lg">
-           <Home size={18}/> Stop Online {/* Ou apenas "Home" */}
-        </Link>
-        
-        {/* Botão Sair mantido aqui */}
-        <button
-          onClick={handleLogout}
-          className="bg-red-600 px-3 py-1 rounded hover:bg-red-700 text-sm flex items-center gap-1"
-        >
-          <LogOut size={16} /> Sair
-        </button>
-      </nav>
-      {/* Container com padding para o conteúdo */}
-      <main className="p-4 md:p-8 max-w-7xl mx-auto">
-        <Outlet /> {/* As rotas filhas (HomeScreen, Lobby, Game, Shop) serão renderizadas aqui */}
+    <>
+      {/* Componente do Cursor */}
+      <TargetCursor 
+        spinDuration={2}
+        hideDefaultCursor={true}
+      />
+
+      {/* Componente para mostrar notificações (sonner) */}
+      <Toaster 
+        position="top-center" 
+        richColors 
+        theme="dark"
+        toastOptions={{
+          style: { 
+            fontFamily: '"Rajdhani", sans-serif', 
+            border: '1px solid #444',
+            background: '#1a1a1a',
+            color: '#eee',
+          },
+        }}
+      />
+      
+      {/* 3. ADICIONAR O HEADER AQUI */}
+      {/* Ele ficará fixo no topo de todas as páginas */}
+      <Header />
+
+      {/* O 'main' agora tem o padding-top (pt-[72px]) 
+          para não ficar escondido atrás do Header */}
+      <main className="pt-[72px] min-h-screen">
+        {/* O Outlet renderiza as páginas (Home, Lobby, etc.) */}
+        <Outlet /> 
       </main>
-    </div>
-  )
+    </>
+  );
 }
+
+export default App;

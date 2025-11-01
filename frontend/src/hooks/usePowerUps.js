@@ -39,7 +39,7 @@ export function usePowerUps(rodadaId, isLocked) {
   }, []); // Roda apenas uma vez na montagem
 
   // --- FUNÇÃO PARA USAR POWER-UP ---
-  const handleUsePowerUp = (powerUp) => {
+  const handleUsePowerUp = (powerUp, targetTemaNome = null) => {
     if (!rodadaId || isLocked) {
       alert("Aguarde a rodada estar ativa.");
       return;
@@ -57,6 +57,9 @@ export function usePowerUps(rodadaId, isLocked) {
     } else if (powerUp.code === 'REVEAL_OPPONENT_ANSWER') {
         // A verificação de 'revealPending' será feita no componente
          confirmUse = window.confirm(`Usar "${powerUp.nome}"? A resposta será mostrada no final da rodada.`);
+    } else if (powerUp.code === 'DISREGARD_OPPONENT_WORD' || powerUp.code === 'SKIP_OPPONENT_CATEGORY') {
+        // A verificação de 'activeSkipOpponentPowerUpId' será feita no componente
+        confirmUse = window.confirm(`Ativar o power-up "${powerUp.nome}"? Você poderá desconsiderar UMA categoria do oponente.`);
     }
 
     if (!confirmUse) return;
@@ -64,9 +67,10 @@ export function usePowerUps(rodadaId, isLocked) {
     // Emitir evento para o backend processar o uso
     socket.emit('powerup:use', {
       powerUpId: powerUp.power_up_id,
-      targetPlayerId: targetPlayerId
+      targetPlayerId: targetPlayerId,
+      targetTemaNome: targetTemaNome
     });
-    console.log(`Comando 'powerup:use' emitido para ${powerUp.code}`);
+    console.log(`Comando 'powerup:use' emitido para ${powerUp.code}${targetTemaNome ? ` com tema ${targetTemaNome}` : ''}`);
   };
 
   return {

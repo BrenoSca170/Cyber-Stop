@@ -7,6 +7,7 @@ import { useEffect } from 'react'; // <-- IMPORTAR useEffect
 import { useGameSocket } from '../hooks/useGameSocket';
 import { useGameInput } from '../hooks/useGameInput';
 import { usePowerUps } from '../hooks/usePowerUps';
+import socket from '../lib/socket';
 
 // Nossos novos Componentes de UI
 import JumpscareOverlay from '../components/game/JumpscareOverlay';
@@ -33,7 +34,7 @@ export default function GameScreen() {
   
   // Desestrutura o estado para passar para os outros hooks
   const { rodadaId, isLocked, finalizado, totais, vencedor } = gameState;
-  const { activeSkipPowerUpId, setActiveSkipPowerUpId } = effectsState;
+  const { activeSkipPowerUpId, setActiveSkipPowerUpId, activeSkipOpponentPowerUpId, setActiveSkipOpponentPowerUpId } = effectsState;
 
   // 2. Hook de Input: Passa o gameState para ele
   const { 
@@ -41,6 +42,8 @@ export default function GameScreen() {
     updateAnswer, 
     skippedCategories, 
     setSkippedCategories,
+    disregardedCategories,
+    handleCategoryDisregarded,
     onStop, 
     handleSkipCategory,
     enviarRespostas // Pega a função para o novo useEffect
@@ -49,6 +52,21 @@ export default function GameScreen() {
     salaId, 
     meuJogadorId
   );
+
+  // Conecta o evento de categoria desconsiderada do socket ao handler
+  useEffect(() => {
+    const handler = (data) => {
+      console.log('GameScreen recebeu effect:category_disregarded:', data);
+      handleCategoryDisregarded(data.temaId);
+    };
+    
+    // Adiciona listener adicional no GameScreen para conectar ao handler local
+    socket.on('effect:category_disregarded', handler);
+    
+    return () => {
+      socket.off('effect:category_disregarded', handler);
+    };
+  }, [handleCategoryDisregarded]);
 
   // 3. Hook de Power-ups:
   const { 
@@ -83,9 +101,21 @@ export default function GameScreen() {
     setActiveSkipPowerUpId(null); // Do hook de socket/effects
   };
   
+  const onSkipOpponentCategory = (temaNome) => {
+    // Encontra o powerup ativo e usa ele com o tema escolhido
+    const powerUp = inventario.find(p => p.power_up_id === activeSkipOpponentPowerUpId);
+    if (powerUp) {
+      handleUsePowerUp(powerUp, temaNome); // Passa o nome do tema
+      setActiveSkipOpponentPowerUpId(null); // Desativa o modo de escolha
+    }
+  };
+
   const onUsePowerUp = (powerUp) => {
     if (powerUp.code === 'SKIP_OWN_CATEGORY' && activeSkipPowerUpId) {
       alert("Pular Categoria já está ativo!"); return;
+    }
+    if ((powerUp.code === 'DISREGARD_OPPONENT_WORD' || powerUp.code === 'SKIP_OPPONENT_CATEGORY') && activeSkipOpponentPowerUpId) {
+      alert("Desconsiderar Categoria do Oponente já está ativo!"); return;
     }
     if (powerUp.code === 'REVEAL_OPPONENT_ANSWER' && effectsState.revealPending) {
       alert("Você já ativou a revelação para esta rodada."); return;
@@ -103,6 +133,7 @@ export default function GameScreen() {
           <JumpscareOverlay
             imageUrl={effectsState.jumpscareData.image}
             soundUrl={effectsState.jumpscareData.sound}
+            duration={effectsState.jumpscareData.duration}
             onEnd={() => effectsState.setShowJumpscare(false)}
           />
         )}
@@ -129,9 +160,10 @@ export default function GameScreen() {
           salaId={salaId}
           meuJogadorId={meuJogadorId}
           gameState={gameState}
-          effectsState={{...effectsState, activeSkipPowerUpId, setActiveSkipPowerUpId}}
-          inputState={{ answers, updateAnswer, onStop, skippedCategories, handleSkipCategory: onSkipCategory }}
+          effectsState={{...effectsState, activeSkipPowerUpId, setActiveSkipPowerUpId, activeSkipOpponentPowerUpId, setActiveSkipOpponentPowerUpId}}
+          inputState={{ answers, updateAnswer, onStop, skippedCategories, disregardedCategories, handleSkipCategory: onSkipCategory }}
           powerUpState={{ inventario, loadingInventory, handleUsePowerUp: onUsePowerUp }}
+          onSkipOpponentCategory={onSkipOpponentCategory}
         />
       )}
     </>

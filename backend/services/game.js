@@ -230,7 +230,7 @@ async function loadLexiconMap({ temaIds, letraId }) {
  * HARDENING: encerra rodada com lock e pontua com base no dicionário
  * ATUALIZADO: Lógica de pontuação refeita para N jogadores
  */
-export async function endRoundAndScore({ salaId, roundId }) {
+export async function endRoundAndScore({ salaId, roundId, skippedWordsSet = null, disregardedOpponentWordsSet = null }) {
   // 🔒 Tenta ganhar o "lock" para evitar pontuação dupla
   const lock = await supa
     .from('rodada')
@@ -330,11 +330,31 @@ export async function endRoundAndScore({ salaId, roundId }) {
       if (jogadoresComEstaResposta.length === 1) {
         // Se SÓ UM jogador deu esta resposta válida -> 10 pontos
         const jId = jogadoresComEstaResposta[0]
-        temaRespostas[jId].pontos = 10
+        // Verifica se a palavra deste jogador foi desconsiderada
+        const isDisregarded = disregardedOpponentWordsSet && disregardedOpponentWordsSet.has(`${jId}-${temaNome}`)
+        if (!isDisregarded) {
+          temaRespostas[jId].pontos = 10
+        }
       } else {
         // Se MAIS DE UM jogador deu esta resposta válida -> 5 pontos para cada um
         for (const jId of jogadoresComEstaResposta) {
-          temaRespostas[jId].pontos = 5
+          // Verifica se a palavra deste jogador foi desconsiderada
+          const isDisregarded = disregardedOpponentWordsSet && disregardedOpponentWordsSet.has(`${jId}-${temaNome}`)
+          if (!isDisregarded) {
+            temaRespostas[jId].pontos = 5
+          }
+        }
+      }
+    }
+
+    // 2.5. Aplica pontos para palavras puladas (SKIP_WORD powerup)
+    if (skippedWordsSet && skippedWordsSet.size > 0) {
+      for (const jId of allJogadorIds) {
+        const skipKey = `${jId}-${temaNome}`
+        if (skippedWordsSet.has(skipKey) && temaRespostas[jId].pontos === 0) {
+          // Se a palavra foi pulada e o jogador não ganhou pontos pela resposta normal, dá 10 pontos
+          temaRespostas[jId].pontos = 10
+          console.log(`[SKIP_WORD] Jogador ${jId} ganhou 10 pontos por pular palavra "${temaNome}"`)
         }
       }
     }
@@ -358,6 +378,56 @@ export async function endRoundAndScore({ salaId, roundId }) {
 
   // Retorna o resultado da rodada e os totais
   return { roundId, roundScore, totais }
+}
+
+// Função auxiliar para buscar resultados de uma rodada já pontuada
+export async function getRoundResults({ salaId, roundId }) {
+  try {
+    // Busca os jogadores da sala
+    let jogadores = await getJogadoresDaSala(salaId);
+    if (!jogadores || jogadores.length === 0) {
+      const q = await supa
+        .from('participacao_rodada')
+        .select('jogador_id', { distinct: true })
+        .eq('rodada_id', roundId);
+      if (q.error) throw q.error;
+      jogadores = (q.data || []).map(r => Number(r.jogador_id)).filter(Boolean).sort((a,b)=>a-b);
+    }
+
+    // Busca os temas da rodada
+    const temas = await getTemasDaRodada(roundId);
+    if (!temas || temas.length === 0) {
+      return { roundId, roundScore: {}, totais: await computeTotaisSala({ salaId }) };
+    }
+
+    // Busca os resultados pontuados do banco
+    const { data: participacoes, error } = await supa
+      .from('participacao_rodada')
+      .select('jogador_id, tema_nome, pontos')
+      .eq('rodada_id', roundId)
+      .in('jogador_id', jogadores)
+      .in('tema_nome', temas.map(t => t.tema_nome));
+
+    if (error) throw error;
+
+    // Constrói o roundScore no formato esperado
+    const roundScore = {};
+    for (const tema of temas) {
+      roundScore[tema.tema_nome] = {};
+      for (const jId of jogadores) {
+        const participacao = participacoes?.find(p => p.jogador_id === jId && p.tema_nome === tema.tema_nome);
+        roundScore[tema.tema_nome][jId] = participacao?.pontos || 0;
+      }
+    }
+
+    // Calcula os totais
+    const totais = await computeTotaisSala({ salaId });
+
+    return { roundId, roundScore, totais };
+  } catch (err) {
+    console.error(`[getRoundResults] Erro ao buscar resultados da rodada ${roundId}:`, err);
+    return { roundId, roundScore: {}, totais: await computeTotaisSala({ salaId }) };
+  }
 }
 
 
