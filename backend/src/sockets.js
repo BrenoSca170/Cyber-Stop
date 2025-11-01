@@ -502,9 +502,10 @@ export function initSockets(httpServer) { //
 
           switch (efeito) { //
             case 'BLUR_OPPONENT_SCREEN_5S': //
-              // Emite para todos os outros na sala
-              socket.to(salaId).emit('effect:jumpscare', { attackerId: usuarioJogadorId /*, image, sound */ }); //
-              socket.emit('powerup:ack', { codigo: efeito, message: 'Jumpscare enviado!' }); // Confirma para quem usou //
+            case 'JUMPSCARE': // Alias para o mesmo efeito
+              // Emite para todos os outros na sala com duração de 3 segundos
+              socket.to(salaId).emit('effect:jumpscare', { attackerId: usuarioJogadorId, duration: 3 /*, image, sound */ }); //
+              socket.emit('powerup:ack', { codigo: efeito, message: 'Jumpscare enviado! Oponente ficará bloqueado por 3s' }); // Confirma para quem usou //
               break;
             case 'SKIP_OWN_CATEGORY': //
               // Emite apenas para o socket que usou o power-up

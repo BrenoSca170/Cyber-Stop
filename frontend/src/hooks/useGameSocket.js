@@ -63,9 +63,9 @@ export function useGameSocket(salaId) {
       setVencedor(vencedor);
       setIsLocked(true);
     };
-    const onJumpscareEffect = ({ attackerId, image, sound }) => {
-        console.log(`effect:jumpscare recebido de ${attackerId}`);
-        setJumpscareData({ attackerId, image, sound });
+    const onJumpscareEffect = ({ attackerId, image, sound, duration }) => {
+        console.log(`effect:jumpscare recebido de ${attackerId}, duração: ${duration}s`);
+        setJumpscareData({ attackerId, image, sound, duration });
         setShowJumpscare(true);
     };
     const onEnableSkip = ({ powerUpId }) => {

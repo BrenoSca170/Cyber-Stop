@@ -5,7 +5,7 @@ import { Ghost } from 'lucide-react'; // Importe o ícone se for usar
 
 // --- Componente Jumpscare Overlay ---
 // (Movido de GameScreen.jsx)
-function JumpscareOverlay({ imageUrl, soundUrl, onEnd }) {
+function JumpscareOverlay({ imageUrl, soundUrl, onEnd, duration = 3 }) {
   useEffect(() => {
     // Toca o som (se houver)
     let audio = null;
@@ -15,7 +15,7 @@ function JumpscareOverlay({ imageUrl, soundUrl, onEnd }) {
     }
 
     // Define um timer para esconder o jumpscare
-    const timer = setTimeout(onEnd, 1500); // Mostra por 1.5 segundos
+    const timer = setTimeout(onEnd, duration * 1000); // Mostra por duration segundos
 
     // Limpeza ao desmontar
     return () => {
@@ -25,11 +25,12 @@ function JumpscareOverlay({ imageUrl, soundUrl, onEnd }) {
         audio.currentTime = 0;
       }
     };
-  }, [soundUrl, onEnd]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Roda apenas uma vez na montagem
 
   return (
     <motion.div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 overflow-hidden pointer-events-none"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 overflow-hidden pointer-events-auto"
       initial={{ scale: 0.5, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
       exit={{ scale: 1.5, opacity: 0 }}

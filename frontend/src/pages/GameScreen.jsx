@@ -103,6 +103,7 @@ export default function GameScreen() {
           <JumpscareOverlay
             imageUrl={effectsState.jumpscareData.image}
             soundUrl={effectsState.jumpscareData.sound}
+            duration={effectsState.jumpscareData.duration}
             onEnd={() => effectsState.setShowJumpscare(false)}
           />
         )}
