@@ -39,7 +39,7 @@ export function usePowerUps(rodadaId, isLocked) {
   }, []); // Roda apenas uma vez na montagem
 
   // --- FUNÇÃO PARA USAR POWER-UP ---
-  const handleUsePowerUp = (powerUp) => {
+  const handleUsePowerUp = (powerUp, targetTemaNome = null) => {
     if (!rodadaId || isLocked) {
       alert("Aguarde a rodada estar ativa.");
       return;
@@ -64,9 +64,10 @@ export function usePowerUps(rodadaId, isLocked) {
     // Emitir evento para o backend processar o uso
     socket.emit('powerup:use', {
       powerUpId: powerUp.power_up_id,
-      targetPlayerId: targetPlayerId
+      targetPlayerId: targetPlayerId,
+      targetTemaNome: targetTemaNome
     });
-    console.log(`Comando 'powerup:use' emitido para ${powerUp.code}`);
+    console.log(`Comando 'powerup:use' emitido para ${powerUp.code}${targetTemaNome ? ` com tema ${targetTemaNome}` : ''}`);
   };
 
   return {

@@ -38,6 +38,23 @@ export default function ActiveRound({
     if (powerUp.code === 'REVEAL_OPPONENT_ANSWER' && revealPending) {
       alert("Você já ativou a revelação para esta rodada."); return;
     }
+    if (powerUp.code === 'SKIP_WORD') {
+      // Mostra um diálogo para escolher qual palavra pular
+      const temasList = temas.map(t => t.nome).join(', ');
+      const escolha = window.prompt(`Qual palavra você deseja pular?\n\nTemas disponíveis: ${temasList}`);
+      if (!escolha) return; // Usuário cancelou
+      
+      // Verifica se a escolha é válida
+      const temaEscolhido = temas.find(t => t.nome.toLowerCase().trim() === escolha.toLowerCase().trim());
+      if (!temaEscolhido) {
+        alert(`Tema "${escolha}" não encontrado nesta rodada.`);
+        return;
+      }
+      
+      // Passa o nome do tema para o handleUsePowerUp
+      handleUsePowerUp(powerUp, temaEscolhido.nome);
+      return;
+    }
     handleUsePowerUp(powerUp);
   }
 

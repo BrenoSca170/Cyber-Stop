@@ -230,7 +230,7 @@ async function loadLexiconMap({ temaIds, letraId }) {
  * HARDENING: encerra rodada com lock e pontua com base no dicionário
  * ATUALIZADO: Lógica de pontuação refeita para N jogadores
  */
-export async function endRoundAndScore({ salaId, roundId }) {
+export async function endRoundAndScore({ salaId, roundId, skippedWordsSet = null }) {
   // 🔒 Tenta ganhar o "lock" para evitar pontuação dupla
   const lock = await supa
     .from('rodada')
@@ -335,6 +335,18 @@ export async function endRoundAndScore({ salaId, roundId }) {
         // Se MAIS DE UM jogador deu esta resposta válida -> 5 pontos para cada um
         for (const jId of jogadoresComEstaResposta) {
           temaRespostas[jId].pontos = 5
+        }
+      }
+    }
+
+    // 2.5. Aplica pontos para palavras puladas (SKIP_WORD powerup)
+    if (skippedWordsSet && skippedWordsSet.size > 0) {
+      for (const jId of allJogadorIds) {
+        const skipKey = `${jId}-${temaNome}`
+        if (skippedWordsSet.has(skipKey) && temaRespostas[jId].pontos === 0) {
+          // Se a palavra foi pulada e o jogador não ganhou pontos pela resposta normal, dá 10 pontos
+          temaRespostas[jId].pontos = 10
+          console.log(`[SKIP_WORD] Jogador ${jId} ganhou 10 pontos por pular palavra "${temaNome}"`)
         }
       }
     }

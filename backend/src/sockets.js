@@ -43,6 +43,37 @@ function getAndClearRevealRequests(salaId, roundId) { //
     }
     return requests || new Set(); //
 }
+
+// ===== Armazenamento para palavras puladas (SKIP_WORD) =====
+// Formato: Map<salaId, Map<roundId, Set<string>>> onde string = "jogadorId-temaNome"
+const skippedWords = new Map(); //
+
+function addSkippedWord(salaId, roundId, jogadorId, temaNome) { //
+    const key = `${salaId}-${roundId}`; //
+    if (!skippedWords.has(key)) { //
+        skippedWords.set(key, new Set()); //
+    }
+    skippedWords.get(key).add(`${jogadorId}-${temaNome}`); //
+    console.log(`[SKIP_WORD] Jogador ${jogadorId} pulou palavra ${temaNome} na rodada ${roundId}`); //
+}
+
+function getSkippedWords(salaId, roundId) { //
+    const key = `${salaId}-${roundId}`; //
+    const words = skippedWords.get(key); //
+    return words || new Set(); //
+}
+
+function clearSkippedWords(salaId, roundId) { //
+    const key = `${salaId}-${roundId}`; //
+    skippedWords.delete(key); //
+}
+
+function isWordSkipped(salaId, roundId, jogadorId, temaNome) { //
+    const key = `${salaId}-${roundId}`; //
+    const words = skippedWords.get(key); //
+    if (!words) return false; //
+    return words.has(`${jogadorId}-${temaNome}`); //
+}
 // ======================================================================
 
 // Map para guardar informações dos timers ativos por sala
@@ -160,7 +191,10 @@ export function scheduleRoundCountdown({ salaId, roundId, duration = 20 }) { //
         // Ele fazia o timer se auto-bloquear.
         // --- FIM DA CORREÇÃO ---
 
-        const payload = await endRoundAndScore({ salaId, roundId }); //
+        const payload = await endRoundAndScore({ salaId, roundId, skippedWordsSet: getSkippedWords(salaId, roundId) }); //
+
+        // Limpa as palavras puladas após pontuar
+        clearSkippedWords(salaId, roundId);
 
         // --- LÓGICA DE REVELAÇÃO (APÓS PONTUAÇÃO) ---
         const revealRequesters = getAndClearRevealRequests(salaId, roundId); //
@@ -321,7 +355,10 @@ export function initSockets(httpServer) { //
              return;
          }
 
-        const payload = await endRoundAndScore({ salaId, roundId }); //
+        const payload = await endRoundAndScore({ salaId, roundId, skippedWordsSet: getSkippedWords(salaId, roundId) }); //
+
+        // Limpa as palavras puladas após pontuar
+        clearSkippedWords(salaId, roundId);
 
         // --- LÓGICA DE REVELAÇÃO (APÓS PONTUAÇÃO - igual ao timer) ---
          const revealRequesters = getAndClearRevealRequests(salaId, roundId); //
@@ -416,7 +453,7 @@ export function initSockets(httpServer) { //
       }
     });
 
-    socket.on('powerup:use', async ({ powerUpId, targetPlayerId = null }) => { //
+    socket.on('powerup:use', async ({ powerUpId, targetPlayerId = null, targetTemaNome = null }) => { //
         const salaId = socket.data.salaId; //
         const usuarioJogadorId = socket.data.jogador_id; //
         const currentRoundId = roomTimers.get(salaId)?.roundId; //
@@ -556,6 +593,38 @@ export function initSockets(httpServer) { //
               } catch (err) {
                 console.error('[CLEAR_ANSWERS] Erro:', err);
                 socket.emit('powerup:error', { message: 'Erro ao apagar campos do adversário.' });
+              }
+              break;
+            case 'SKIP_WORD': //
+              // Pular uma palavra e ganhar os pontos automaticamente
+              try {
+                if (!targetTemaNome) {
+                  socket.emit('powerup:error', { message: 'É necessário especificar qual palavra pular.' });
+                  return;
+                }
+
+                // Busca o nome do tema da rodada
+                const { data: temasRodada, error: temasError } = await supa
+                  .from('rodada_tema')
+                  .select('tema:tema_id(tema_nome)')
+                  .eq('rodada_id', currentRoundId);
+
+                if (temasError) throw temasError;
+                const temasValidos = (temasRodada || []).map(t => t.tema.tema_nome);
+
+                // Verifica se o tema informado é válido para esta rodada
+                if (!temasValidos.includes(targetTemaNome)) {
+                  socket.emit('powerup:error', { message: 'Tema inválido para esta rodada.' });
+                  return;
+                }
+
+                // Marca a palavra como pulada
+                addSkippedWord(salaId, currentRoundId, usuarioJogadorId, targetTemaNome);
+                socket.emit('powerup:ack', { codigo: efeito, message: `Palavra "${targetTemaNome}" foi pulada! Você ganhará pontos automaticamente.` });
+                console.log(`[SKIP_WORD] Jogador ${usuarioJogadorId} pulou palavra ${targetTemaNome} na rodada ${currentRoundId}`);
+              } catch (err) {
+                console.error('[SKIP_WORD] Erro:', err);
+                socket.emit('powerup:error', { message: 'Erro ao pular palavra.' });
               }
               break;
             default: //
