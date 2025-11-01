@@ -9,8 +9,8 @@ function SpinningShape() {
   // Animação de rotação (ajuste a velocidade como quiser)
   useFrame((state, delta) => {
     if (meshRef.current) {
-      meshRef.current.rotation.x += delta * 0.1
-      meshRef.current.rotation.y += delta * 0.3
+      meshRef.current.rotation.x += delta * 0.5
+      meshRef.current.rotation.y += delta * 0.8
     }
   })
 
@@ -21,14 +21,14 @@ function SpinningShape() {
       */}
       
       {/* Opção 1: Esfera (Raio, Segmentos Horizontais, Segmentos Verticais) */}
-      <sphereGeometry args={[1.8, 32, 32]} />
+      {/*<sphereGeometry args={[1.8, 32, 32]} />*/}
       
       {/* Opção 2: Anel (Torus) (Raio do anel, Raio do tubo, SegmentosR, SegmentosT) */}
       {/* <torusGeometry args={[1.5, 0.5, 16, 100]} /> */}
-
+      
       {/* Opção 3: Cubo (Lados) */}
       {/* <boxGeometry args={[2.5, 2.5, 2.5]} /> */}
-
+      <boxGeometry args={[3.5, 3.5, 3.5]} />
 
       {/* Material Neon.
         - Lê a cor '--color-primary' do seu tema CSS.
@@ -49,7 +49,7 @@ export default function CyberLogo() {
   return (
     <Canvas>
       {/* Luzes para iluminar o material */}
-      <ambientLight intensity={0.1} />
+      <ambientLight intensity={0.5} />
       
       <pointLight 
         position={[5, 5, 5]} 
