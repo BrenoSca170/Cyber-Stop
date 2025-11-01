@@ -230,7 +230,7 @@ async function loadLexiconMap({ temaIds, letraId }) {
  * HARDENING: encerra rodada com lock e pontua com base no dicionário
  * ATUALIZADO: Lógica de pontuação refeita para N jogadores
  */
-export async function endRoundAndScore({ salaId, roundId, skippedWordsSet = null }) {
+export async function endRoundAndScore({ salaId, roundId, skippedWordsSet = null, disregardedOpponentWordsSet = null }) {
   // 🔒 Tenta ganhar o "lock" para evitar pontuação dupla
   const lock = await supa
     .from('rodada')
@@ -330,11 +330,19 @@ export async function endRoundAndScore({ salaId, roundId, skippedWordsSet = null
       if (jogadoresComEstaResposta.length === 1) {
         // Se SÓ UM jogador deu esta resposta válida -> 10 pontos
         const jId = jogadoresComEstaResposta[0]
-        temaRespostas[jId].pontos = 10
+        // Verifica se a palavra deste jogador foi desconsiderada
+        const isDisregarded = disregardedOpponentWordsSet && disregardedOpponentWordsSet.has(`${jId}-${temaNome}`)
+        if (!isDisregarded) {
+          temaRespostas[jId].pontos = 10
+        }
       } else {
         // Se MAIS DE UM jogador deu esta resposta válida -> 5 pontos para cada um
         for (const jId of jogadoresComEstaResposta) {
-          temaRespostas[jId].pontos = 5
+          // Verifica se a palavra deste jogador foi desconsiderada
+          const isDisregarded = disregardedOpponentWordsSet && disregardedOpponentWordsSet.has(`${jId}-${temaNome}`)
+          if (!isDisregarded) {
+            temaRespostas[jId].pontos = 5
+          }
         }
       }
     }

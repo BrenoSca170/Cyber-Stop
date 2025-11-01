@@ -18,6 +18,7 @@ export function useGameSocket(salaId) {
   const [showJumpscare, setShowJumpscare] = useState(false);
   const [jumpscareData, setJumpscareData] = useState({});
   const [activeSkipPowerUpId, setActiveSkipPowerUpId] = useState(null);
+  const [activeSkipOpponentPowerUpId, setActiveSkipOpponentPowerUpId] = useState(null);
   const [revealPending, setRevealPending] = useState(false);
   const [revealedAnswer, setRevealedAnswer] = useState(null);
 
@@ -35,6 +36,7 @@ export function useGameSocket(salaId) {
       setTimeLeft(null);
       setIsLocked(true);
       setActiveSkipPowerUpId(null);
+      setActiveSkipOpponentPowerUpId(null);
       setRevealPending(false);
       setRevealedAnswer(null);
       setShowJumpscare(false);
@@ -72,10 +74,19 @@ export function useGameSocket(salaId) {
         console.log(`effect:enable_skip recebido para powerUpId: ${powerUpId}`);
         setActiveSkipPowerUpId(powerUpId);
     };
+    const onEnableSkipOpponent = ({ powerUpId }) => {
+        console.log(`effect:enable_skip_opponent recebido para powerUpId: ${powerUpId}`);
+        setActiveSkipOpponentPowerUpId(powerUpId);
+    };
     const onAnswerRevealed = ({ temaNome, resposta, oponenteId }) => {
         console.log(`effect:answer_revealed recebido: Oponente=${oponenteId}, Tema=${temaNome}, Resposta=${resposta}`);
         setRevealedAnswer({ temaNome, resposta, oponenteId });
         setRevealPending(false);
+    };
+    // Handler para categoria desconsiderada - será sobrescrito no GameScreen se necessário
+    const onCategoryDisregarded = ({ temaId, temaNome, attackerId }) => {
+        console.log(`effect:category_disregarded recebido: Categoria ${temaId} (${temaNome}) desconsiderada por jogador ${attackerId}`);
+        // Este evento será tratado no GameScreen para atualizar o estado de input
     };
     const onPowerUpAck = ({ codigo, message }) => {
         console.log(`powerup:ack recebido: ${codigo} - ${message}`);
@@ -110,7 +121,9 @@ export function useGameSocket(salaId) {
     socket.on('match:end', onMatchEnd);
     socket.on('effect:jumpscare', onJumpscareEffect);
     socket.on('effect:enable_skip', onEnableSkip);
+    socket.on('effect:enable_skip_opponent', onEnableSkipOpponent);
     socket.on('effect:answer_revealed', onAnswerRevealed);
+    socket.on('effect:category_disregarded', onCategoryDisregarded);
     socket.on('powerup:ack', onPowerUpAck);
     socket.on('powerup:error', onPowerUpError);
     socket.on('app:error', onAppError);
@@ -153,7 +166,9 @@ export function useGameSocket(salaId) {
       socket.off('match:end', onMatchEnd);
       socket.off('effect:jumpscare', onJumpscareEffect);
       socket.off('effect:enable_skip', onEnableSkip);
+      socket.off('effect:enable_skip_opponent', onEnableSkipOpponent);
       socket.off('effect:answer_revealed', onAnswerRevealed);
+      socket.off('effect:category_disregarded', onCategoryDisregarded);
       socket.off('powerup:ack', onPowerUpAck);
       socket.off('powerup:error', onPowerUpError);
       socket.off('app:error', onAppError);
@@ -181,6 +196,8 @@ export function useGameSocket(salaId) {
       jumpscareData,
       activeSkipPowerUpId,
       setActiveSkipPowerUpId,
+      activeSkipOpponentPowerUpId,
+      setActiveSkipOpponentPowerUpId,
       revealPending,
       revealedAnswer,
     }

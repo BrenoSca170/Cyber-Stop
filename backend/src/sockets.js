@@ -76,6 +76,39 @@ function isWordSkipped(salaId, roundId, jogadorId, temaNome) { //
 }
 // ======================================================================
 
+// ===== Armazenamento para palavras desconsideradas do oponente (DISREGARD_OPPONENT_WORD) =====
+// Formato: Map<salaId, Map<roundId, Set<string>>> onde string = "jogadorId-temaNome"
+// Diferente de SKIP_WORD, aqui o jogador NÃO ganha pontos pela palavra desconsiderada
+const disregardedOpponentWords = new Map(); //
+
+function addDisregardedOpponentWord(salaId, roundId, targetJogadorId, temaNome) { //
+    const key = `${salaId}-${roundId}`; //
+    if (!disregardedOpponentWords.has(key)) { //
+        disregardedOpponentWords.set(key, new Set()); //
+    }
+    disregardedOpponentWords.get(key).add(`${targetJogadorId}-${temaNome}`); //
+    console.log(`[DISREGARD_OPPONENT_WORD] Palavra "${temaNome}" do jogador ${targetJogadorId} foi desconsiderada na rodada ${roundId}`); //
+}
+
+function getDisregardedOpponentWords(salaId, roundId) { //
+    const key = `${salaId}-${roundId}`; //
+    const words = disregardedOpponentWords.get(key); //
+    return words || new Set(); //
+}
+
+function clearDisregardedOpponentWords(salaId, roundId) { //
+    const key = `${salaId}-${roundId}`; //
+    disregardedOpponentWords.delete(key); //
+}
+
+function isOpponentWordDisregarded(salaId, roundId, jogadorId, temaNome) { //
+    const key = `${salaId}-${roundId}`; //
+    const words = disregardedOpponentWords.get(key); //
+    if (!words) return false; //
+    return words.has(`${jogadorId}-${temaNome}`); //
+}
+// ======================================================================
+
 // Map para guardar informações dos timers ativos por sala
 const roomTimers = new Map(); //
 
@@ -191,10 +224,17 @@ export function scheduleRoundCountdown({ salaId, roundId, duration = 20 }) { //
         // Ele fazia o timer se auto-bloquear.
         // --- FIM DA CORREÇÃO ---
 
-        const payload = await endRoundAndScore({ salaId, roundId, skippedWordsSet: getSkippedWords(salaId, roundId) }); //
+        const payload = await endRoundAndScore({ 
+          salaId, 
+          roundId, 
+          skippedWordsSet: getSkippedWords(salaId, roundId),
+          disregardedOpponentWordsSet: getDisregardedOpponentWords(salaId, roundId)
+        }); //
 
         // Limpa as palavras puladas após pontuar
         clearSkippedWords(salaId, roundId);
+        // Limpa as palavras desconsideradas do oponente após pontuar
+        clearDisregardedOpponentWords(salaId, roundId);
 
         // --- LÓGICA DE REVELAÇÃO (APÓS PONTUAÇÃO) ---
         const revealRequesters = getAndClearRevealRequests(salaId, roundId); //
@@ -355,10 +395,17 @@ export function initSockets(httpServer) { //
              return;
          }
 
-        const payload = await endRoundAndScore({ salaId, roundId, skippedWordsSet: getSkippedWords(salaId, roundId) }); //
+        const payload = await endRoundAndScore({ 
+          salaId, 
+          roundId, 
+          skippedWordsSet: getSkippedWords(salaId, roundId),
+          disregardedOpponentWordsSet: getDisregardedOpponentWords(salaId, roundId)
+        }); //
 
         // Limpa as palavras puladas após pontuar
         clearSkippedWords(salaId, roundId);
+        // Limpa as palavras desconsideradas do oponente após pontuar
+        clearDisregardedOpponentWords(salaId, roundId);
 
         // --- LÓGICA DE REVELAÇÃO (APÓS PONTUAÇÃO - igual ao timer) ---
          const revealRequesters = getAndClearRevealRequests(salaId, roundId); //
@@ -626,6 +673,83 @@ export function initSockets(httpServer) { //
               } catch (err) {
                 console.error('[SKIP_WORD] Erro:', err);
                 socket.emit('powerup:error', { message: 'Erro ao pular palavra.' });
+              }
+              break;
+            case 'DISREGARD_OPPONENT_WORD': //
+            case 'SKIP_OPPONENT_CATEGORY': // Alias para compatibilidade
+              // Ativa o powerup para permitir escolher qual categoria desconsiderar do oponente
+              // Similar ao SKIP_OWN_CATEGORY, mas afeta o oponente
+              try {
+                // Verifica se há oponentes
+                const todosJogadores = await getJogadoresDaSala(salaId);
+                const oponentesIds = todosJogadores.filter(id => id !== usuarioJogadorId);
+                
+                if (oponentesIds.length === 0) {
+                  socket.emit('powerup:error', { message: 'Não há oponentes na sala para afetar.' });
+                  return;
+                }
+
+                // Se targetTemaNome foi fornecido, já aplica diretamente
+                if (targetTemaNome) {
+                  // Se targetPlayerId foi especificado, usa ele; senão seleciona aleatório
+                  let targetId = targetPlayerId ? Number(targetPlayerId) : oponentesIds[Math.floor(Math.random() * oponentesIds.length)];
+                  
+                  // Verifica se o alvo é válido
+                  if (!oponentesIds.includes(targetId)) {
+                    targetId = oponentesIds[0]; // Fallback para primeiro oponente
+                  }
+
+                  // Busca o nome do tema da rodada
+                  const { data: temasRodada, error: temasError } = await supa
+                    .from('rodada_tema')
+                    .select('tema:tema_id(tema_nome)')
+                    .eq('rodada_id', currentRoundId);
+
+                  if (temasError) throw temasError;
+                  const temasValidos = (temasRodada || []).map(t => t.tema.tema_nome);
+
+                  // Verifica se o tema informado é válido para esta rodada
+                  if (!temasValidos.includes(targetTemaNome)) {
+                    socket.emit('powerup:error', { message: 'Tema inválido para esta rodada.' });
+                    return;
+                  }
+
+                  // Marca a palavra do oponente como desconsiderada
+                  addDisregardedOpponentWord(salaId, currentRoundId, targetId, targetTemaNome);
+                  
+                  // Notifica o oponente que sua categoria foi bloqueada
+                  const targetSocketId = await getSocketIdByPlayerId(targetId);
+                  if (targetSocketId) {
+                    // Busca o tema_id para enviar ao frontend
+                    const { data: temasRodadaFull, error: temasErrFull } = await supa
+                      .from('rodada_tema')
+                      .select('tema_id, tema:tema_id(tema_nome)')
+                      .eq('rodada_id', currentRoundId);
+                    
+                    let temaId = null;
+                    if (!temasErrFull && temasRodadaFull) {
+                      const temaFound = temasRodadaFull.find(t => t.tema?.tema_nome === targetTemaNome);
+                      if (temaFound) temaId = temaFound.tema_id;
+                    }
+                    
+                    if (temaId) {
+                      io.to(targetSocketId).emit('effect:category_disregarded', { 
+                        temaId: temaId, 
+                        temaNome: targetTemaNome,
+                        attackerId: usuarioJogadorId 
+                      });
+                    }
+                  }
+                  
+                  socket.emit('powerup:ack', { codigo: efeito, message: `Palavra "${targetTemaNome}" do oponente foi desconsiderada! Ele não ganhará pontos por ela.` });
+                  console.log(`[DISREGARD_OPPONENT_WORD] Jogador ${usuarioJogadorId} desconsiderou palavra "${targetTemaNome}" do jogador ${targetId} na rodada ${currentRoundId}`);
+                } else {
+                  // Ativa o modo de escolha (similar ao SKIP_OWN_CATEGORY)
+                  socket.emit('effect:enable_skip_opponent', { powerUpId: powerUpId });
+                }
+              } catch (err) {
+                console.error('[DISREGARD_OPPONENT_WORD] Erro:', err);
+                socket.emit('powerup:error', { message: 'Erro ao ativar desconsideração de palavra do oponente.' });
               }
               break;
             default: //

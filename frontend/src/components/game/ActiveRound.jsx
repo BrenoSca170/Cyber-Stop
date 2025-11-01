@@ -9,6 +9,7 @@ export default function ActiveRound({
   effectsState,
   inputState,
   powerUpState,
+  onSkipOpponentCategory,
 }) {
   const { 
     letra, 
@@ -21,8 +22,8 @@ export default function ActiveRound({
     finalizado 
   } = gameState;
 
-  const { activeSkipPowerUpId, setActiveSkipPowerUpId, revealPending, revealedAnswer } = effectsState;
-  const { answers, updateAnswer, onStop, skippedCategories, handleSkipCategory } = inputState;
+  const { activeSkipPowerUpId, setActiveSkipPowerUpId, activeSkipOpponentPowerUpId, setActiveSkipOpponentPowerUpId, revealPending, revealedAnswer } = effectsState;
+  const { answers, updateAnswer, onStop, skippedCategories, disregardedCategories, handleSkipCategory } = inputState;
   const { inventario, loadingInventory, handleUsePowerUp } = powerUpState;
 
   const onSkip = (temaId) => {
@@ -31,9 +32,20 @@ export default function ActiveRound({
     setActiveSkipPowerUpId(null); 
   }
   
+  const onSkipOpponent = (temaNome) => {
+    if (!activeSkipOpponentPowerUpId || isLocked) return;
+    if (onSkipOpponentCategory) {
+      onSkipOpponentCategory(temaNome);
+    }
+    setActiveSkipOpponentPowerUpId(null); 
+  };
+
   const onUsePowerUp = (powerUp) => {
     if (powerUp.code === 'SKIP_OWN_CATEGORY' && activeSkipPowerUpId) {
       alert("Pular Categoria já está ativo!"); return;
+    }
+    if ((powerUp.code === 'DISREGARD_OPPONENT_WORD' || powerUp.code === 'SKIP_OPPONENT_CATEGORY') && activeSkipOpponentPowerUpId) {
+      alert("Desconsiderar Categoria do Oponente já está ativo!"); return;
     }
     if (powerUp.code === 'REVEAL_OPPONENT_ANSWER' && revealPending) {
       alert("Você já ativou a revelação para esta rodada."); return;
@@ -91,15 +103,16 @@ export default function ActiveRound({
         <div className="space-y-3">
           {(temas || []).map(t => {
             const isSkipped = skippedCategories.has(t.id);
+            const isDisregarded = disregardedCategories.has(t.id);
             return (
               <div key={t.id} className="flex items-center gap-2">
                  <CategoryRow
                     categoryName={t.nome}
-                    value={isSkipped ? '--- PULADO ---' : (answers[t.id] || '')}
+                    value={isSkipped ? '--- PULADO ---' : (isDisregarded ? '--- DESCONSIDERADA ---' : (answers[t.id] || ''))}
                     onChange={e => updateAnswer(t.id, e.target.value)}
-                    isDisabled={isLocked || timeLeft === 0 || isSkipped}
-                    // Passa a classe para o input quando pulado
-                    inputClassName={isSkipped ? 'text-text-muted/70 italic bg-bg-input/50' : ''}
+                    isDisabled={isLocked || timeLeft === 0 || isSkipped || isDisregarded}
+                    // Passa a classe para o input quando pulado ou desconsiderado
+                    inputClassName={isSkipped ? 'text-text-muted/70 italic bg-bg-input/50' : (isDisregarded ? 'text-red-400/70 italic bg-red-900/30' : '')}
                   />
                   {/* Botão de Pular */}
                   {activeSkipPowerUpId && !isSkipped && (
@@ -110,6 +123,17 @@ export default function ActiveRound({
                           title="Pular esta categoria (usará o power-up)"
                         >
                            <SkipForward size={20}/>
+                       </button>
+                  )}
+                  {/* Botão de Desconsiderar Categoria do Oponente */}
+                  {activeSkipOpponentPowerUpId && (
+                       <button
+                          onClick={() => onSkipOpponent(t.nome)}
+                          disabled={isLocked || timeLeft === 0}
+                          className="bg-red-600 hover:bg-red-700 text-white p-2 rounded-lg disabled:opacity-50 transition-transform hover:scale-110"
+                          title="Desconsiderar esta categoria do oponente (usará o power-up)"
+                        >
+                           <SkipForward size={20} className="rotate-180"/>
                        </button>
                   )}
               </div>

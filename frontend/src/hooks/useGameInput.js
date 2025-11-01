@@ -10,12 +10,14 @@ export function useGameInput(gameState, salaId, meuJogadorId) {
 
   const [answers, setAnswers] = useState({});
   const [skippedCategories, setSkippedCategories] = useState(new Set());
+  const [disregardedCategories, setDisregardedCategories] = useState(new Set());
   const debounceTimers = useRef(new Map());
 
   // Limpa respostas quando a rodadaId muda (agora depende do rodadaId vindo do gameState)
   useEffect(() => {
     setAnswers({});
     setSkippedCategories(new Set());
+    setDisregardedCategories(new Set());
     
     for (const t of debounceTimers.current.values()) clearTimeout(t);
     debounceTimers.current.clear();
@@ -52,6 +54,7 @@ export function useGameInput(gameState, salaId, meuJogadorId) {
   const updateAnswer = (temaId, texto) => {
     if (isLocked) return; // Usa o isLocked do estado
     if (skippedCategories.has(temaId)) return;
+    if (disregardedCategories.has(temaId)) return; // Não permite editar categoria desconsiderada
     setAnswers(prev => ({ ...prev, [temaId]: texto }));
     autosaveAnswer(temaId, texto);
   };
@@ -117,11 +120,25 @@ export function useGameInput(gameState, salaId, meuJogadorId) {
       setSkippedCategories(prev => new Set(prev).add(temaId));
   };
 
+  // Handler para quando uma categoria é desconsiderada pelo oponente
+  const handleCategoryDisregarded = (temaId) => {
+    console.log(`Categoria ${temaId} foi desconsiderada pelo oponente`);
+    setDisregardedCategories(prev => new Set(prev).add(temaId));
+    // Limpa a resposta da categoria desconsiderada
+    setAnswers(prev => {
+      const newAnswers = { ...prev };
+      delete newAnswers[temaId];
+      return newAnswers;
+    });
+  };
+
   return {
     answers,
     updateAnswer,
     skippedCategories,
     setSkippedCategories,
+    disregardedCategories,
+    handleCategoryDisregarded,
     onStop,
     handleSkipCategory,
     enviarRespostas 
