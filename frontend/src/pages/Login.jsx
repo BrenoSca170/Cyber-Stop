@@ -1,5 +1,5 @@
 // src/pages/Login.jsx
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import api from '../lib/api'
 import { useNavigate } from 'react-router-dom'
 import FaultyTerminalR3F from '../components/FaultyTerminalR3F'
@@ -12,6 +12,20 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const nav = useNavigate()
+
+  // Verifica se o usuário já está logado e redireciona imediatamente
+  useEffect(() => {
+    const token = localStorage.getItem('token')
+    if (token) {
+      nav('/', { replace: true })
+    }
+  }, [nav])
+
+  // Se já estiver logado, não renderiza o componente
+  const token = localStorage.getItem('token')
+  if (token) {
+    return null // Retorna null para evitar renderização enquanto redireciona
+  }
 
   const submit = async (e) => {
     e.preventDefault()
