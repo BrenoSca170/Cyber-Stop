@@ -2,7 +2,8 @@
 import { useState, useEffect } from 'react';
 import api from '../lib/api'; 
 import ShopItem from '../components/ShopItem'; 
-import BuyCoinsModal from '../components/BuyCoinsModal'; 
+import BuyCoinsModal from '../components/BuyCoinsModal';
+import PaymentModal from '../components/PaymentModal';
 import { Wallet, Store, Loader2, PlusCircle, Package } from 'lucide-react'; // Ícones
 
 function ShopScreen() {
@@ -13,7 +14,10 @@ function ShopScreen() {
   const [purchasingId, setPurchasingId] = useState(null); 
   const [message, setMessage] = useState(''); 
   const [error, setError] = useState(''); 
-  const [isBuyCoinsModalOpen, setIsBuyCoinsModalOpen] = useState(false); 
+  const [isBuyCoinsModalOpen, setIsBuyCoinsModalOpen] = useState(false);
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [pendingAmount, setPendingAmount] = useState(0);
+  const [pkgPrice, setPkgPrice] = useState('');
 
   // ... (NENHUMA alteração na lógica: fetchData, handlePurchase, handleConfirmCoinPurchase) ...
 
@@ -79,6 +83,12 @@ function ShopScreen() {
         setError(err.response?.data?.error || "Ocorreu um erro ao adicionar moedas.");
         setTimeout(() => setError(''), 4000); 
     }
+  };
+
+  const handleRequestPaymentMethod = (amount, price) => {
+    setPendingAmount(amount);
+    setPkgPrice(price);
+    setIsPaymentModalOpen(true);
   };
 
   // --- Renderização Atualizada ---
@@ -193,7 +203,18 @@ function ShopScreen() {
       <BuyCoinsModal 
         isOpen={isBuyCoinsModalOpen} 
         onClose={() => setIsBuyCoinsModalOpen(false)} 
-        onConfirmPurchase={handleConfirmCoinPurchase} 
+        onRequestPaymentMethod={handleRequestPaymentMethod}
+      />
+      {/* Renderiza o Modal de Pagamento */}
+      <PaymentModal
+        isOpen={isPaymentModalOpen}
+        onClose={() => setIsPaymentModalOpen(false)}
+        onConfirm={(amount) => {
+          handleConfirmCoinPurchase(amount);
+          setIsPaymentModalOpen(false);
+        }}
+        amount={pendingAmount}
+        price={pkgPrice}
       />
     </div>
   );
