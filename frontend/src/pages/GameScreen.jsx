@@ -7,6 +7,7 @@ import { useEffect } from 'react'; // <-- IMPORTAR useEffect
 import { useGameSocket } from '../hooks/useGameSocket';
 import { useGameInput } from '../hooks/useGameInput';
 import { usePowerUps } from '../hooks/usePowerUps';
+import { useScreenRotation } from '../hooks/useScreenRotation';
 import socket from '../lib/socket';
 
 // Nossos novos Componentes de UI
@@ -53,6 +54,10 @@ export default function GameScreen() {
     meuJogadorId
   );
 
+  // Hook de rotação de tela
+  const { applyRandomRotation } = useScreenRotation();
+
+
   // Conecta o evento de categoria desconsiderada do socket ao handler
   useEffect(() => {
     const handler = (data) => {
@@ -67,6 +72,22 @@ export default function GameScreen() {
       socket.off('effect:category_disregarded', handler);
     };
   }, [handleCategoryDisregarded]);
+
+  // Novo effect: escuta o evento de inverter tela do oponente
+  useEffect(() => {
+    const handleInvertScreen = (data) => {
+      console.log('🎮 Recebeu effect:invert_screen', data);
+      const { duration = 5000 } = data; // duração padrão: 5 segundos
+      applyRandomRotation(duration); // aplica a rotação aleatória
+    };
+
+    socket.on('effect:invert_screen', handleInvertScreen);
+
+    return () => {
+      socket.off('effect:invert_screen', handleInvertScreen);
+    };
+  }, [applyRandomRotation]);
+
 
   // 3. Hook de Power-ups:
   const { 
@@ -119,6 +140,11 @@ export default function GameScreen() {
     }
     if (powerUp.code === 'REVEAL_OPPONENT_ANSWER' && effectsState.revealPending) {
       alert("Você já ativou a revelação para esta rodada."); return;
+    }
+    if (powerUp.code === 'SCREEN_DIRECTION_MOD') {
+      console.log('Ativando power-up de inversão de tela (SCREEN_DIRECTION_MOD)');
+      handleUsePowerUp(powerUp); // Envia para o servidor decidir quem será o alvo
+      return;
     }
     handleUsePowerUp(powerUp); // Do hook de power-ups
   };

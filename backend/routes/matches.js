@@ -1,7 +1,7 @@
 // backend/routes/matches.js
 import { Router } from 'express';
 import { supa } from '../services/supabase.js';
-import { getIO, scheduleRoundCountdown } from '../src/sockets.js';
+import { getIO, scheduleRoundCountdown, getTimerTimeLeft } from '../src/sockets.js';
 import { buildRoundPayload, generateCoherentRounds } from '../services/game.js';
 
 const router = Router();
@@ -65,9 +65,22 @@ router.post('/start', async (req, res) => {
           .update({ status: 'in_progress' })
           .eq('rodada_id', payload.rodada_id);
 
-        io.to(String(sala_id)).emit('round:ready', payload);
-        io.to(String(sala_id)).emit('round:started', { roundId: payload.rodada_id, duration: DURATION });
-        scheduleRoundCountdown({ salaId: sala_id, roundId: payload.rodada_id, duration: DURATION });
+        // Verifica se já existe um timer ativo para esta sala/rodada
+        const activeTimer = getTimerTimeLeft(sala_id, payload.rodada_id);
+        
+        if (activeTimer && activeTimer.timeLeft > 0) {
+          // Timer já existe e está ativo - não reinicia, apenas envia o estado atual
+          console.log(`[MATCHES/START] Timer ativo encontrado para sala ${sala_id}, rodada ${payload.rodada_id}. Tempo restante: ${activeTimer.timeLeft}s`);
+          io.to(String(sala_id)).emit('round:ready', payload);
+          io.to(String(sala_id)).emit('round:started', { roundId: payload.rodada_id, duration: activeTimer.timeLeft });
+          // Não chama scheduleRoundCountdown aqui - o timer já está rodando
+        } else {
+          // Timer não existe ou já expirou - cria um novo timer
+          console.log(`[MATCHES/START] Criando novo timer para sala ${sala_id}, rodada ${payload.rodada_id}, duração ${DURATION}s`);
+          io.to(String(sala_id)).emit('round:ready', payload);
+          io.to(String(sala_id)).emit('round:started', { roundId: payload.rodada_id, duration: DURATION });
+          scheduleRoundCountdown({ salaId: sala_id, roundId: payload.rodada_id, duration: DURATION });
+        }
       }
       return res.json({ ok: true, reused: true });
     }

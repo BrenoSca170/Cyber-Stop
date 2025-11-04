@@ -19,6 +19,11 @@ export default function MatchEndScreen({ totais, vencedor, meuJogadorId, onReFet
   const isLoser = !isEmpate && vencedor?.jogador_id !== meuJogadorId;
   const isTieParticipant = isEmpate && vencedor?.jogadores?.includes(meuJogadorId);
 
+  // --- [NOVO] Transforma o placar em um array ordenado ---
+  // Transforma { "1": 100, "2": 150 } em [ ["2", 150], ["1", 100] ]
+  const sortedTotais = Object.entries(totais || {}).sort(([, ptsA], [, ptsB]) => ptsB - ptsA);
+
+
   return (
     // Aplicado tema: fonte, cores, augmented-ui e 3D
     <div 
@@ -27,32 +32,44 @@ export default function MatchEndScreen({ totais, vencedor, meuJogadorId, onReFet
     >
       <h2 className="text-3xl font-bold mb-4 text-text-header">Partida encerrada!</h2>
 
-      {/* Mensagem de Resultado */}
+      {/* Mensagem de Resultado (sem alteração) */}
       {isWinner && (
-        <div className="mb-3 [transform:translateZ(10px)]">
+        <div 
+          className="mb-3 p-4 [transform:translateZ(10px)] bg-bg-input/30"
+          data-augmented-ui="tl-clip br-clip border inlay"
+        >
           <Trophy className="w-16 h-16 text-warning mx-auto animate-pulse" />
           <p className="text-2xl text-warning font-semibold mt-2">🎉 Você Venceu! 🎉</p>
         </div>
       )}
       {isLoser && (
-         <div className="mb-3 [transform:translateZ(10px)]">
+         <div 
+           className="mb-3 p-4 [transform:translateZ(10px)] bg-bg-input/30"
+           data-augmented-ui="tl-clip br-clip border inlay"
+         >
             <p className="text-2xl text-text-muted font-semibold">😢 Fim da Conexão 😢</p>
          </div>
       )}
       {isTieParticipant && (
-        <div className="mb-3 [transform:translateZ(10px)]">
+        <div 
+          className="mb-3 p-4 [transform:translateZ(10px)] bg-bg-input/30"
+          data-augmented-ui="tl-clip br-clip border inlay"
+        >
           <Users className="w-16 h-16 text-secondary mx-auto" />
           <p className="text-2xl text-secondary font-semibold mt-2">🤝 Empate! 🤝</p>
         </div>
       )}
       {isEmpate && !isTieParticipant && (
-        <div className="mb-3 [transform:translateZ(10px)]">
+        <div 
+          className="mb-3 p-4 [transform:translateZ(10px)] bg-bg-input/30"
+          data-augmented-ui="tl-clip br-clip border inlay"
+        >
           <GitMerge className="w-16 h-16 text-text-muted mx-auto" />
           <p className="text-2xl text-text-muted font-semibold mt-2">🤝 Empate entre outros jogadores.</p>
         </div>
       )}
 
-      {/* Detalhes do Vencedor/Empate */}
+      {/* Detalhes do Vencedor/Empate (sem alteração) */}
       {isEmpate ? (
         <p className="mb-2 [transform:translateZ(10px)]">
           <b>Empate</b> entre Jogadores <b className="text-secondary">{Array.isArray(vencedor?.jogadores) ? vencedor.jogadores.join(' e ') : '-'}</b>
@@ -65,18 +82,49 @@ export default function MatchEndScreen({ totais, vencedor, meuJogadorId, onReFet
       )}
        <p className="mb-4 [transform:translateZ(10px)]">Sua pontuação final: <b className="text-xl text-accent">{myScore}</b></p>
 
-      {/* Placar Final Detalhado */}
+      {/* === [INÍCIO] PLACAR FINAL EM TABELA === */}
       <h3 className="mt-5 mb-2 font-medium text-lg text-text-header [transform:translateZ(10px)]">Placar Final Detalhado</h3>
-      <pre className="bg-bg-input p-3 rounded mt-1 text-sm text-left overflow-x-auto max-h-40 [transform:translateZ(10px)]">
-        {JSON.stringify(totais, null, 2)}
-      </pre>
+      <div className="overflow-x-auto [transform:translateZ(10px)]">
+        <table className="w-full border-collapse border border-secondary/30 font-mono text-sm">
+          <thead data-augmented-ui="tl-clip tr-clip" className="bg-bg-input/70">
+            <tr>
+              <th className="p-2 border-r border-secondary/30 text-center text-text-muted uppercase">Posição</th>
+              <th className="p-2 border-r border-secondary/30 text-left text-text-muted uppercase">Jogador ID</th>
+              <th className="p-2 text-right text-text-muted uppercase">Pontuação Final</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sortedTotais.map(([jId, pts], index) => {
+              const isMe = Number(jId) === meuJogadorId;
+              return (
+                <tr 
+                  key={jId} 
+                  // Destaca a linha do jogador atual
+                  className={`bg-bg-input/30 hover:bg-bg-input/50 transition-colors ${isMe ? 'bg-accent/20 hover:bg-accent/30' : ''}`}
+                >
+                  <td className="p-2 border-r border-t border-secondary/30 font-medium text-warning text-center">
+                    #{index + 1}
+                  </td>
+                  <td className={`p-2 border-r border-t border-secondary/30 font-medium ${isMe ? 'text-accent font-bold' : 'text-secondary'}`}>
+                    Jogador {jId}
+                  </td>
+                  <td className={`p-2 border-t border-secondary/30 text-right font-bold text-lg ${isMe ? 'text-accent' : 'text-white'}`}>
+                    {pts} pts
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {/* === [FIM] PLACAR FINAL EM TABELA === */}
       
-      {/* Botão para voltar ao Lobby */}
+      {/* Botão para voltar ao Lobby (sem alteração) */}
       <button
           onClick={() => navigate('/')}
           className="mt-6 bg-secondary hover:bg-secondary/80 text-black px-6 py-2 rounded text-lg font-semibold 
                      transition-all hover:scale-105 [transform-style:preserve-3d] hover:[transform:translateZ(15px)] active:[transform:translateZ(5px)]
-                     flex items-center justify-center gap-2 mx-auto"
+                     flex items-center justify-center gap-2 mx-auto cursor-target"
           data-augmented-ui="tl-scoop tr-scoop br-scoop bl-scoop"
       >
           <Home size={20} />

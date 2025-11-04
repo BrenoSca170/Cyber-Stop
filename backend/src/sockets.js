@@ -115,12 +115,41 @@ const roomTimers = new Map(); //
 // Função para limpar/cancelar um timer existente para uma sala
 function clearTimerForSala(salaId) {
     salaId = String(salaId); //
-    if (roomTimers.has(salaId)) {
+    if (roomTimers.has(salaId)) { //
         const { interval } = roomTimers.get(salaId); //
         clearInterval(interval); //
         roomTimers.delete(salaId); //
-        console.log(`[TIMER] Timer for sala ${salaId} cleared.`);
+        console.log(`[TIMER] Timer for sala ${salaId} cleared.`); //
     }
+}
+
+// Função para obter o tempo restante de um timer ativo
+// Retorna { timeLeft, roundId } se existe um timer ativo para a sala e rodada, ou null se não existe
+export function getTimerTimeLeft(salaId, roundId) {
+    salaId = String(salaId);
+    roundId = Number(roundId);
+    
+    if (!roomTimers.has(salaId)) {
+        return null;
+    }
+    
+    const timer = roomTimers.get(salaId);
+    
+    // Verifica se o timer é para a mesma rodada
+    if (timer.roundId !== roundId) {
+        return null;
+    }
+    
+    // Calcula o tempo restante
+    const now = Date.now();
+    const timeLeft = Math.max(0, Math.ceil((timer.endsAt - now) / 1000));
+    
+    // Se o tempo já acabou, retorna null (timer não está mais ativo)
+    if (timeLeft <= 0) {
+        return null;
+    }
+    
+    return { timeLeft, roundId: timer.roundId };
 }
 
 // Set para guardar rodadas já pontuadas (evitar pontuação dupla)
@@ -823,6 +852,44 @@ export function initSockets(httpServer) { //
                 socket.emit('powerup:error', { message: 'Erro ao ativar desconsideração de palavra do oponente.' });
               }
               break;
+              case 'SCREEN_DIRECTION_MOD': //
+                // Inverte a tela de um oponente aleatoriamente
+                try {
+                  const todosJogadores = await getJogadoresDaSala(salaId);
+                  const oponentesIds = todosJogadores.filter(id => id !== usuarioJogadorId);
+
+                  if (oponentesIds.length === 0) {
+                    socket.emit('powerup:error', { message: 'Não há oponentes na sala para afetar.' });
+                    return;
+                  }
+
+                  // Se targetPlayerId foi especificado, usa ele; senão escolhe aleatoriamente
+                  let targetId = targetPlayerId
+                    ? Number(targetPlayerId)
+                    : oponentesIds[Math.floor(Math.random() * oponentesIds.length)];
+
+                  // Verifica se o alvo é válido
+                  if (!oponentesIds.includes(targetId)) {
+                    targetId = oponentesIds[0]; // fallback
+                  }
+
+                  const targetSocketId = await getSocketIdByPlayerId(targetId);
+                  if (targetSocketId) {
+                    const duration = 5000; // duração do efeito em milissegundos
+                    io.to(targetSocketId).emit('effect:invert_screen', { duration, attackerId: usuarioJogadorId });
+                    socket.emit('powerup:ack', {
+                      codigo: efeito,
+                      message: `Tela do adversário foi invertida por ${duration / 1000} segundos!`
+                    });
+                    console.log(`[SCREEN_DIRECTION_MOD] Jogador ${usuarioJogadorId} inverteu a tela de ${targetId} por ${duration}ms`);
+                  } else {
+                    socket.emit('powerup:error', { message: 'Oponente não está conectado.' });
+                  }
+                } catch (err) {
+                  console.error('[SCREEN_DIRECTION_MOD] Erro:', err);
+                  socket.emit('powerup:error', { message: 'Erro ao aplicar o power-up de inversão de tela.' });
+                }
+                break;
             default: //
               console.warn(`[powerup:use] Efeito desconhecido: ${efeito}`); //
               socket.emit('powerup:error', { message: `Efeito não implementado: ${efeito}`}); //
