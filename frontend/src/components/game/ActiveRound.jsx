@@ -146,7 +146,7 @@ export default function ActiveRound({
           <button
             className="bg-primary px-8 py-3 rounded-lg text-xl font-bold text-black hover:bg-primary/80 
                        disabled:bg-gray-600 disabled:cursor-not-allowed flex-grow md:flex-grow-0 
-                       transition-all hover:scale-105 hover:[transform:translateZ(10px)] active:[transform:translateZ(2px)]"
+                       transition-all hover:scale-105 hover:[transform:translateZ(10px)] active:[transform:translateZ(2px)] cursor-target"
             onClick={onStop}
             disabled={!rodadaId || isLocked || timeLeft === 0}
             data-augmented-ui="tl-scoop tr-scoop br-scoop bl-scoop"
@@ -165,7 +165,7 @@ export default function ActiveRound({
                       onClick={() => onUsePowerUp(p)} 
                       disabled={isLocked || timeLeft === 0}
                       className="bg-primary/80 border border-primary text-white px-3 py-1 rounded-full text-xs font-semibold shadow-lg shadow-primary/30
-                                 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 transition-transform hover:scale-110"
+                                 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 transition-transform hover:scale-110 cursor-target"
                       title={`${p.nome} - ${p.descricao} (x${p.quantidade})`}
                   >
                       <Zap size={12} /> {p.nome} <span className="bg-bg-primary text-secondary text-[10px] px-1.5 py-0.5 rounded-full ml-1">{p.quantidade}</span>

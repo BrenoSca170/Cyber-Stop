@@ -117,7 +117,7 @@ function ShopScreen() {
           <button 
             onClick={() => setIsBuyCoinsModalOpen(true)} 
             className="bg-warning hover:bg-warning/80 text-black font-semibold py-2 px-4 rounded-md flex items-center gap-2 text-sm md:text-base w-full md:w-auto justify-center 
-                       transition-all hover:scale-105 [transform-style:preserve-3d] hover:[transform:translateZ(15px)] active:[transform:translateZ(5px)]"
+                       transition-all hover:scale-105 [transform-style:preserve-3d] hover:[transform:translateZ(15px)] active:[transform:translateZ(5px)] cursor-target"
             data-augmented-ui="tl-scoop tr-scoop br-scoop bl-scoop"
           >
             <PlusCircle size={18} /> Adquirir Créditos
