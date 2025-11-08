@@ -14,10 +14,33 @@ router.post('/register', async (req, res) => {
   try {
     const { email, password, nome_de_usuario } = req.body
     if (!email || !password || !nome_de_usuario) {
-      return res.status(400).json({ error: 'email, password and nome_de_usuario required' })
+      return res.status(400).json({ error: 'email, senha e nome de usuário são obrigatórios' })
     }
 
-    // check existing
+ 
+    const allowedDomains = [
+      'gmail.com',
+      'hotmail.com',
+      'outlook.com',
+      'yahoo.com',
+      'icloud.com'
+      // Adicione aqui outros domínios que deseja permitir
+    ];
+
+    let emailDomain;
+    try {
+      emailDomain = email.split('@')[1].toLowerCase();
+    } catch (splitError) {
+      // Isso falha se o email não tiver '@' ou for inválido
+      return res.status(400).json({ error: 'Formato de email inválido' });
+    }
+
+    if (!allowedDomains.includes(emailDomain)) {
+      return res.status(400).json({ 
+        error: 'Dominio de email inválido, adicione um dominio valido' 
+      });
+    }
+    
     const { data: existing, error: e1 } = await supa
       .from('jogador')
       .select('jogador_id')
@@ -25,7 +48,7 @@ router.post('/register', async (req, res) => {
       .maybeSingle()
     if (e1) throw e1
     if (existing) {
-      return res.status(409).json({ error: 'User with email or username already exists' })
+      return res.status(409).json({ error: 'email ou nome de usuários já cadastrados' })
     }
 
     const senha_hash = await bcrypt.hash(password, 8)
@@ -49,14 +72,14 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body
-    if (!email || !password) return res.status(400).json({ error: 'email and password required' })
+    if (!email || !password) return res.status(400).json({ error: 'email e senha obrigatórios' })
 
     const { data: user, error } = await supa.from('jogador').select('jogador_id, nome_de_usuario, email, senha_hash').eq('email', email).maybeSingle()
     if (error) throw error
-    if (!user) return res.status(401).json({ error: 'Invalid credentials' })
+    if (!user) return res.status(401).json({ error: 'Credenciais invalidas' })
 
     const ok = await bcrypt.compare(password, user.senha_hash)
-    if (!ok) return res.status(401).json({ error: 'Invalid credentials' })
+    if (!ok) return res.status(401).json({ error: 'Credenciais invalidas' })
 
     const token = jwt.sign({ sub: user.jogador_id }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN })
     // return user without senha_hash
@@ -81,7 +104,7 @@ router.get('/me', requireAuth, async (req, res) => {
   } catch (e) {
     // O requireAuth já trata erros 401,
     // este catch é apenas para segurança.
-    res.status(500).json({ error: 'Internal server error', message: e.message });
+    res.status(500).json({ error: 'Erro interno', message: e.message });
   }
 });
 
@@ -92,7 +115,7 @@ router.put('/avatar', async (req, res) => {
     // 1. Autenticar o usuário (pegar o ID do token)
     const auth = req.headers.authorization;
     if (!auth || !auth.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Missing Authorization header' });
+      return res.status(401).json({ error: 'header de autorização faltando' });
     }
     const token = auth.split(' ')[1];
     const payload = jwt.verify(token, JWT_SECRET);
@@ -101,7 +124,7 @@ router.put('/avatar', async (req, res) => {
     // 2. Pegar o nome do avatar do corpo da requisição
     const { avatar_nome } = req.body;
     if (!avatar_nome) {
-      return res.status(400).json({ error: 'avatar_nome is required' });
+      return res.status(400).json({ error: 'avatar_nome necessário' });
     }
 
     // 3. Atualizar o banco de dados
@@ -116,7 +139,7 @@ router.put('/avatar', async (req, res) => {
 
     res.json({ success: true, avatar_nome: data.avatar_nome });
   } catch (e) {
-    res.status(401).json({ error: 'Invalid token or update failed', message: e.message });
+    res.status(401).json({ error: 'token inválido', message: e.message });
   }
 });
 
