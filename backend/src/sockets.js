@@ -112,6 +112,21 @@ function isOpponentWordDisregarded(salaId, roundId, jogadorId, temaNome) { //
 // Map para guardar informações dos timers ativos por sala
 const roomTimers = new Map(); //
 
+// =======================================================
+// === INÍCIO DAS NOVAS ALTERAÇÕES (CORREÇÃO F5) ===
+// =======================================================
+
+// Mapa para guardar timers de desconexão
+// Formato: Map<jogadorId, NodeJS.Timeout>
+const disconnectTimers = new Map();
+// Tempo que esperamos antes de remover o jogador (ex: 7 segundos)
+const DISCONNECT_GRACE_MS = 7000;
+
+// =======================================================
+// === FIM DAS NOVAS ALTERAÇÕES ===
+// =======================================================
+
+
 // Função para limpar/cancelar um timer existente para uma sala
 function clearTimerForSala(salaId) {
     salaId = String(salaId); //
@@ -174,7 +189,6 @@ async function adicionarMoedas(jogadorId, quantidade) {
     try {
       console.log(`[MOEDAS] Adicionando ${quantidade} moedas para jogador ${jogadorId}...`);
       // Usando rpc para chamar uma função SQL 'adicionar_moedas' (mais seguro contra race conditions)
-      // Você precisará criar essa função no Supabase SQL Editor:
       /*
       CREATE OR REPLACE FUNCTION adicionar_moedas(jogador_id_param int, quantidade_param int)
       RETURNS void AS $$
@@ -191,10 +205,6 @@ async function adicionarMoedas(jogadorId, quantidade) {
       });
       if (error) throw error;
       console.log(`[MOEDAS] ${quantidade} moedas adicionadas para jogador ${jogadorId}.`);
-
-      // Opcional: Notificar o jogador sobre o ganho de moedas via socket?
-      // const socketId = await getSocketIdByPlayerId(jogadorId);
-      // if (socketId) io.to(socketId).emit('player:coins_updated', { /* novo saldo? */ });
 
     } catch(e) {
         console.error(`[MOEDAS] Erro ao adicionar ${quantidade} moedas para jogador ${jogadorId}:`, e.message);
@@ -247,11 +257,6 @@ export function scheduleRoundCountdown({ salaId, roundId, duration = 20 }) { //
         console.log(`[TIMER->STOP] sala=${salaId} round=${roundId}`); //
         io.to(salaId).emit('round:stopping', { roundId }); //
         await sleep(GRACE_MS); //
-
-        // --- CORREÇÃO APLICADA ---
-        // O bloco 'if (scoredRounds.has(...))' que estava aqui foi REMOVIDO.
-        // Ele fazia o timer se auto-bloquear.
-        // --- FIM DA CORREÇÃO ---
 
         const payload = await endRoundAndScore({ 
           salaId, 
@@ -401,15 +406,33 @@ export function initSockets(httpServer) { //
   io.on('connection', (socket) => { //
     console.log('a user connected:', socket.id, 'jogador_id:', socket.data.jogador_id); //
 
+    // =======================================================
+    // === ALTERAÇÃO EM 'join-room' (CORREÇÃO F5) ===
+    // =======================================================
     socket.on('join-room', (salaId) => { //
         salaId = String(salaId); // Garante que é string
-        console.log(`Socket ${socket.id} (jogador ${socket.data.jogador_id}) joining room ${salaId}`);
+        const jogadorId = socket.data.jogador_id; // Pega o jogador_id
+
+        console.log(`Socket ${socket.id} (jogador ${jogadorId}) joining room ${salaId}`);
+
+        // --- INÍCIO DA LÓGICA DE RECONEXÃO ---
+        // Se este jogador tinha um timer de desconexão pendente, cancele-o.
+        if (disconnectTimers.has(jogadorId)) {
+            clearTimeout(disconnectTimers.get(jogadorId));
+            disconnectTimers.delete(jogadorId);
+            console.log(`[RECONNECT] Jogador ${jogadorId} reconectou. Timer de desconexão cancelado.`);
+        }
+        // --- FIM DA LÓGICA DE RECONEXÃO ---
+        
         socket.join(salaId); //
         // Guarda a sala no socket data para referência futura (ex: disconnect)
         socket.data.salaId = salaId; //
         // Confirma que entrou (opcional)
         socket.emit('joined', { salaId }); //
     });
+    // =======================================================
+    // === FIM DA ALTERAÇÃO EM 'join-room' ===
+    // =======================================================
 
     socket.on('round:stop', async ({ salaId, roundId, by }) => { //
        try { //
@@ -900,37 +923,63 @@ export function initSockets(httpServer) { //
         }
     });
 
+    // =======================================================
+    // === ALTERAÇÃO EM 'disconnect' (CORREÇÃO F5) ===
+    // =======================================================
     socket.on('disconnect', (reason) => { //
         console.log('user disconnected:', socket.id, 'jogador_id:', socket.data.jogador_id, 'reason:', reason); //
         // Lógica para remover jogador da sala no disconnect (simplificado)
         const salaId = socket.data.salaId; //
         const jogadorId = socket.data.jogador_id; //
+
         if (salaId && jogadorId) {
-           console.log(`[DISCONNECT] Removendo jogador ${jogadorId} da sala ${salaId} (se existir)...`);
-           supa.from('jogador_sala').delete().match({ sala_id: salaId, jogador_id: jogadorId })
-             .then(({ error }) => {
-                 if (error) {
-                     console.error(`[DISCONNECT] Erro ao remover jogador ${jogadorId} da sala ${salaId}:`, error);
-                 } else {
-                     console.log(`[DISCONNECT] Jogador ${jogadorId} removido da sala ${salaId} (ou já não estava).`);
-                     // Emitir atualização de jogadores para a sala
-                     const io = getIO();
-                     if (io) {
-                        supa.from('jogador_sala')
-                            .select('jogador:jogador_id(nome_de_usuario)')
-                            .eq('sala_id', salaId)
-                            .then(({ data: playersData, error: playersError }) => {
-                                if (!playersError) {
-                                    const playerNames = (playersData || []).map(p => p.jogador?.nome_de_usuario || 'Desconhecido');
-                                    console.log(`[DISCONNECT] Emitindo players_updated para sala ${salaId}:`, playerNames);
-                                    io.to(salaId).emit('room:players_updated', { jogadores: playerNames });
-                                }
-                            });
-                     }
-                 }
-             });
+           // Não remove imediatamente. Agenda a remoção.
+           console.log(`[DISCONNECT] Jogador ${jogadorId} desconectou. Iniciando grace period de ${DISCONNECT_GRACE_MS}ms...`);
+           
+           // Cancela qualquer timer de desconexão *anterior* (caso raro, mas seguro)
+           if (disconnectTimers.has(jogadorId)) {
+               clearTimeout(disconnectTimers.get(jogadorId));
+           }
+
+           const timerId = setTimeout(async () => {
+               console.log(`[DISCONNECT GRACE END] Grace period de ${jogadorId} terminou. Removendo da sala ${salaId}.`);
+               try {
+                   // Esta é a lógica que estava aqui antes
+                   const { error } = await supa.from('jogador_sala').delete().match({ sala_id: salaId, jogador_id: jogadorId });
+                   
+                   if (error) {
+                       console.error(`[DISCONNECT] Erro ao remover jogador ${jogadorId} da sala ${salaId}:`, error);
+                   } else {
+                       console.log(`[DISCONNECT] Jogador ${jogadorId} removido da sala ${salaId} (ou já não estava).`);
+                       
+                       // Emitir atualização de jogadores para a sala
+                       const io = getIO();
+                       if (io) {
+                          const { data: playersData, error: playersError } = await supa.from('jogador_sala')
+                              .select('jogador:jogador_id(nome_de_usuario)')
+                              .eq('sala_id', salaId);
+                              
+                          if (!playersError) {
+                              const playerNames = (playersData || []).map(p => p.jogador?.nome_de_usuario || 'Desconhecido');
+                              console.log(`[DISCONNECT] Emitindo players_updated para sala ${salaId}:`, playerNames);
+                              io.to(salaId).emit('room:players_updated', { jogadores: playerNames });
+                          }
+                       }
+                   }
+               } catch (e) {
+                   console.error(`[DISCONNECT] Erro catastrófico no timer de disconnect:`, e);
+               }
+               
+               disconnectTimers.delete(jogadorId); // Limpa o timer do mapa
+           }, DISCONNECT_GRACE_MS); // Espera o tempo de carência
+
+           // Armazena o timer
+           disconnectTimers.set(jogadorId, timerId);
         }
     });
+    // =======================================================
+    // === FIM DA ALTERAÇÃO EM 'disconnect' ===
+    // =======================================================
 
   });
 
