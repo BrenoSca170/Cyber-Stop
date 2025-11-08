@@ -1,99 +1,135 @@
 import { useState, useEffect } from 'react';
-// Importamos o cliente 'api' que tem o interceptor de token
 import api from '../lib/api'; 
-// Opcional: para redirecionar se o usuário não estiver logado
-// import { useNavigate } from 'react-router-dom';
+import { AVATAR_LIST, DEFAULT_AVATAR } from '../lib/avatarList'; 
+import GlitchText from '../components/GlitchText'; 
+// NÃO importamos mais o GlitchButton nem seu CSS
 
 function ProfileScreen() {
   const [profileData, setProfileData] = useState({
     nome_de_usuario: '',
     email: '',
+    avatar_nome: DEFAULT_AVATAR, 
   });
 
   const [loading, setLoading] = useState(true);
-  // const navigate = useNavigate(); // Descomente se quiser redirecionar
+  const [isSaving, setIsSaving] = useState(false); 
 
+  const avatarBasePath = '/avatars/';
+
+  // useEffect e handleRandomAvatar (a lógica) permanecem iguais
   useEffect(() => {
     const fetchProfile = async () => {
       setLoading(true);
-
       try {
-        // 1. Chamar o endpoint /auth/me do backend
-        // O interceptor no 'api.js' vai adicionar o 'Authorization: Bearer ...'
-        const { data } = await api.get('/auth/me');
-
-        // 2. O backend (auth.js) retorna um objeto { jogador: { ... } }
+        const { data } = await api.get('/auth/me'); 
         if (data.jogador) {
+          if (!data.jogador.avatar_nome) {
+            data.jogador.avatar_nome = DEFAULT_AVATAR;
+          }
           setProfileData(data.jogador);
-        } else {
-          // Isso não deve acontecer se o /me funcionar, mas é bom ter
-          console.log("Nenhum usuário logado encontrado.");
         }
       } catch (error) {
         console.error('Erro ao buscar perfil:', error.message);
-        // Se der erro (ex: token inválido ou expirado),
-        // podemos redirecionar para o login
-        // navigate('/login'); 
       } finally {
         setLoading(false);
       }
     };
 
     fetchProfile();
-  }, []); // O array de dependências vazio garante que isso rode apenas uma vez
+  }, []);
 
-  
-  if (loading) {
-    return <div className="text-white text-center p-10">Carregando...</div>;
-  }
+  const handleRandomAvatar = async () => {
+    if (isSaving || AVATAR_LIST.length === 0) return;
+    setIsSaving(true);
+    
+    let newAvatar = profileData.avatar_nome;
+    if (AVATAR_LIST.length > 1) {
+      do {
+        const randomIndex = Math.floor(Math.random() * AVATAR_LIST.length);
+        newAvatar = AVATAR_LIST[randomIndex];
+      } while (newAvatar === profileData.avatar_nome);
+    } else if (AVATAR_LIST.length === 1) {
+      newAvatar = AVATAR_LIST[0];
+    }
+    
+    setProfileData((prev) => ({ ...prev, avatar_nome: newAvatar }));
+
+    try {
+      await api.put('/auth/avatar', { avatar_nome: newAvatar });
+    } catch (error) {
+      console.error('Erro ao salvar avatar:', error.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
 
   return (
-    <div className="flex justify-center p-8 text-white">
-      <div className="w-full max-w-lg">
-        <h1 className="text-4xl font-bold mb-8 text-center">Meu Perfil</h1>
+    <div className="flex justify-center items-center min-h-screen p-4 sm:p-8 text-white">
+      {/* Voltamos o fundo para o gray-800, que é mais consistente */}
+      <div className="w-full max-w-md p-6 sm:p-8 bg-gray-800 rounded-lg shadow-2xl border border-gray-700">
         
-        {/* Espaço para a Foto de Perfil Padrão (igual ao seu) */}
-        <div className="flex justify-center mb-6">
-          <div className="w-32 h-32 md:w-40 md:h-40 rounded-full bg-gray-700 flex items-center justify-center text-gray-400 border-4 border-gray-600">
+        <GlitchText text="Meu perfil" fontSize={2} color="rgb(57, 255, 20)" fontWeight="bold" textAlign="center" font="https://fonts.gstatic.com/s/orbitron/v35/yMJMMIlzdpvBhQQL_SC3X9yhF25-T1ny_Cmxpg.ttf" />
+        
+        <div className="flex flex-col items-center mb-8">
+          
+          {/* Avatar */}
+          <div className="relative w-32 h-32 md:w-40 md:h-40">
+            <img
+              src={avatarBasePath + profileData.avatar_nome}
+              alt="Avatar Atual"
+              className="w-full h-full rounded-full bg-gray-700 border-4 border-blue-500 object-cover shadow-lg shadow-blue-500/30"
+            />
+            <div className="absolute inset-0 rounded-full border border-white/10 animate-pulse"></div>
+          </div>
+          
+          {/* Botão de Sorteio (Icone) - Posicionado Abaixo */}
+          <button
+            onClick={handleRandomAvatar}
+            disabled={isSaving || loading}
+            className="mt-4 p-2 rounded-full text-blue-400 hover:text-white hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 transition-all duration-200 disabled:text-gray-600 disabled:bg-transparent disabled:cursor-not-allowed"
+            aria-label="Sortear novo avatar" // Importante para acessibilidade
+          >
             <svg 
               xmlns="http://www.w3.org/2000/svg" 
-              className="h-20 w-20 md:h-24 md:w-24" 
+              // Adiciona animação de giro se estiver salvando
+              className={`h-8 w-8 ${isSaving ? 'animate-spin' : ''}`} 
               fill="none" 
               viewBox="0 0 24 24" 
-              stroke="currentColor"
+              stroke="currentColor" 
+              strokeWidth={2}
             >
               <path 
                 strokeLinecap="round" 
                 strokeLinejoin="round" 
-                strokeWidth={1.5} 
-                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" 
+                d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.992 0l3.181 3.183a8.25 8.25 0 0013.803-3.183M4.031 9.348a8.25 8.25 0 0113.803-3.183l3.181 3.183m-4.992-4.992v4.992m0 0H9.345" 
               />
             </svg>
-          </div>
+          </button>
         </div>
 
-        {/* Informações do Perfil (Apenas Visualização) */}
-        <div className="space-y-6">
+        {/* Campos de Nome de Usuário e Email */}
+        <div className="space-y-6 mb-10">
           <div>
-            <label className="block text-sm font-medium text-gray-300">
+            <label className="block text-sm font-medium text-gray-400 uppercase tracking-wider">
               Nome de Usuário
             </label>
-            {/* Usamos o dado do estado, com um fallback */}
-            <div className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 p-3 shadow-sm sm:text-lg text-white cursor-target">
-              {profileData.nome_de_usuario || 'Não encontrado'}
+            <div className="mt-1 block w-full rounded-md border-gray-600 bg-gray-900 p-3 shadow-sm sm:text-lg text-white font-mono cursor-default">
+              {profileData.nome_de_usuario || (loading ? 'Carregando...' : 'N/A')}
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-300">
+            <label className="block text-sm font-medium text-gray-400 uppercase tracking-wider">
               Email
             </label>
-            {/* Usamos o dado do estado, com um fallback */}
-            <div className="mt-1 block w-full rounded-md border-gray-600 bg-gray-800 p-3 text-gray-400 shadow-sm sm:text-lg cursor-target">
-              {profileData.email || 'Não encontrado'}
+            <div className="mt-1 block w-full rounded-md border-gray-600 bg-gray-900 p-3 text-gray-400 shadow-sm sm:text-lg font-mono cursor-default">
+              {profileData.email || (loading ? 'Carregando...' : 'N/A')}
             </div>
           </div>
-          
         </div>
+        
+        {/* O GlitchButton foi removido daqui */}
+        
       </div>
     </div>
   );

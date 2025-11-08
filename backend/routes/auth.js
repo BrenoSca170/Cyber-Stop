@@ -3,6 +3,7 @@ import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { supa } from '../services/supabase.js'
+import requireAuth from '../middlewares/requireAuth.js' // <--- ADICIONE ISTO
 
 const router = Router()
 const JWT_SECRET = process.env.JWT_SECRET || 'developer_secret_key'
@@ -67,22 +68,57 @@ router.post('/login', async (req, res) => {
 })
 
 // GET /auth/me
-router.get('/me', async (req, res) => {
+router.get('/me', requireAuth, async (req, res) => {
   try {
-    const auth = req.headers.authorization
-    if (!auth || !auth.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Missing Authorization header' })
-    }
-    const token = auth.split(' ')[1]
-    const payload = jwt.verify(token, JWT_SECRET)
-    const jogador_id = payload.sub
-    const { data: jogador, error } = await supa.from('jogador').select('jogador_id, nome_de_usuario, email').eq('jogador_id', jogador_id).maybeSingle()
-    if (error) throw error
-    if (!jogador) return res.status(404).json({ error: 'User not found' })
-    res.json({ jogador })
-  } catch (e) {
-    res.status(401).json({ error: 'Invalid token', message: e.message })
-  }
-})
+    // O middleware 'requireAuth' já fez todo o trabalho:
+    // 1. Verificou o token
+    // 2. Buscou o jogador no banco (incluindo 'avatar_nome')
+    // 3. Anexou o jogador em 'req.user'
 
-export default router
+    // Apenas retornamos o jogador que o middleware encontrou
+    res.json({ jogador: req.user });
+
+  } catch (e) {
+    // O requireAuth já trata erros 401,
+    // este catch é apenas para segurança.
+    res.status(500).json({ error: 'Internal server error', message: e.message });
+  }
+});
+
+// === NOVA ROTA ===
+// PUT /auth/avatar (Para salvar o novo avatar)
+router.put('/avatar', async (req, res) => {
+  try {
+    // 1. Autenticar o usuário (pegar o ID do token)
+    const auth = req.headers.authorization;
+    if (!auth || !auth.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Missing Authorization header' });
+    }
+    const token = auth.split(' ')[1];
+    const payload = jwt.verify(token, JWT_SECRET);
+    const jogador_id = payload.sub;
+
+    // 2. Pegar o nome do avatar do corpo da requisição
+    const { avatar_nome } = req.body;
+    if (!avatar_nome) {
+      return res.status(400).json({ error: 'avatar_nome is required' });
+    }
+
+    // 3. Atualizar o banco de dados
+    const { data, error } = await supa
+      .from('jogador')
+      .update({ avatar_nome: avatar_nome })
+      .eq('jogador_id', jogador_id)
+      .select('avatar_nome') // Retorna o novo valor
+      .single();
+
+    if (error) throw error;
+
+    res.json({ success: true, avatar_nome: data.avatar_nome });
+  } catch (e) {
+    res.status(401).json({ error: 'Invalid token or update failed', message: e.message });
+  }
+});
+
+
+export default router;

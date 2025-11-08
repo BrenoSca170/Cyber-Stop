@@ -1,7 +1,7 @@
 // backend/routes/rooms.js
 import { Router } from 'express';
 import { supa } from '../services/supabase.js';
-import { requireAuth } from '../middlewares/requireAuth.js';
+import requireAuth from '../middlewares/requireAuth.js';
 import { getIO } from '../src/sockets.js';
 
 const router = Router();

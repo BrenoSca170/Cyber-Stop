@@ -1,7 +1,7 @@
 // backend/routes/shop.js
 import { Router } from 'express';
 import { supa } from '../services/supabase.js';
-import { requireAuth } from '../middlewares/requireAuth.js'; // Reutiliza o middleware de autenticação
+import  requireAuth  from '../middlewares/requireAuth.js'; // Reutiliza o middleware de autenticação
 
 const router = Router();
 

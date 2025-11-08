@@ -1,24 +1,43 @@
-// src/middlewares/requireAuth.js
-import jwt from 'jsonwebtoken';
+// UploadiaBreno/backend/middlewares/requireAuth.js (Atualizado)
 
-const JWT_SECRET = process.env.JWT_SECRET || 'developer_secret_key';
+import jwt from 'jsonwebtoken'
+import { supa } from '../services/supabase.js'
 
-export function requireAuth(req, res, next) {
-  console.log(`[requireAuth] Checking auth for: ${req.method} ${req.originalUrl}`); // <-- ADD THIS
+// Garanta que esta chave é a MESMA do seu routes/auth.js
+const JWT_SECRET = process.env.JWT_SECRET || 'developer_secret_key'
+
+const requireAuth = async (req, res, next) => {
+  // 1. Pegar o token do cabeçalho
+  const { authorization } = req.headers
+  if (!authorization || !authorization.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Authorization token required' })
+  }
+  const token = authorization.split(' ')[1]
+
   try {
-    const auth = req.headers.authorization;
-    if (!auth || !auth.startsWith('Bearer ')) {
-      console.log("[requireAuth] FAILED: Missing Authorization header"); // <-- ADD THIS
-      return res.status(401).json({ error: 'Missing Authorization header' });
+    // 2. Verificar o token com JWT (igual ao routes/auth.js)
+    const payload = jwt.verify(token, JWT_SECRET)
+    const jogador_id = payload.sub
+
+    // 3. Buscar o jogador no banco (igual ao routes/auth.js)
+    const { data: jogador, error } = await supa
+      .from('jogador')
+      .select('jogador_id, nome_de_usuario, email, avatar_nome') // Já pegamos o avatar aqui também
+      .eq('jogador_id', jogador_id)
+      .maybeSingle()
+
+    if (error) throw error
+    if (!jogador) {
+      return res.status(401).json({ error: 'User not found' })
     }
-    const token = auth.split(' ')[1];
-    console.log("[requireAuth] Token found:", token ? 'Yes' : 'No'); // <-- ADD THIS
-    const payload = jwt.verify(token, JWT_SECRET);
-    req.user = { jogador_id: payload.sub };
-    console.log("[requireAuth] SUCCESS: User ID", req.user.jogador_id); // <-- ADD THIS
-    next();
+
+    // 4. Anexar o 'jogador' (não o 'user' do supabase) ao request
+    req.user = jogador // Agora 'req.user' será o objeto do jogador
+    next()
   } catch (e) {
-    console.log("[requireAuth] FAILED: Invalid token -", e.message); // <-- ADD THIS
-    return res.status(401).json({ error: 'Invalid token', message: e.message });
+    // Se jwt.verify falhar (expirado, inválido), cai aqui
+    res.status(401).json({ error: 'Invalid token', message: e.message })
   }
 }
+
+export default requireAuth
