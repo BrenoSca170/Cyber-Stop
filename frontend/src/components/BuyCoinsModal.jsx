@@ -4,10 +4,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Coins, X, ShoppingCart, Loader2 } from 'lucide-react';
 
 const coinPackages = [
-  { id: 1, amount: 100, price: "R$ 4,99" },
-  { id: 2, amount: 550, price: "R$ 24,99" },
-  { id: 3, amount: 1200, price: "R$ 49,99" },
-  { id: 4, amount: 3000, price: "R$ 99,99" },
+  { id: 1, amount: 10, price: "R$ 4,99" },
+  { id: 2, amount: 50, price: "R$ 24,99" },
+  { id: 3, amount: 130, price: "R$ 49,99" },
+  { id: 4, amount: 300, price: "R$ 99,99" },
 ];
 
 function BuyCoinsModal({ isOpen, onClose, onRequestPaymentMethod }) {
@@ -55,7 +55,7 @@ function BuyCoinsModal({ isOpen, onClose, onRequestPaymentMethod }) {
 
             {/* Corpo do Modal */}
             <div className="p-6 space-y-4 bg-bg-primary/50" data-augmented-ui="inlay">
-              <p className="text-text-muted text-sm">Selecione um pacote de créditos (simulação):</p>
+              <p className="text-text-muted text-sm">Selecione um pacote de créditos :</p>
               
               {/* Grid de Pacotes */}
               <div className="grid grid-cols-2 gap-4">
@@ -63,7 +63,7 @@ function BuyCoinsModal({ isOpen, onClose, onRequestPaymentMethod }) {
                   <button
                     key={pkg.id}
                     onClick={() => handleSelectPackage(pkg)}
-                    className={`p-4 rounded-md border-2 transition-all text-center focus:outline-none 
+                    className={`p-4 rounded-md border-2 transition-all text-center focus:outline-none cursor-target 
                     ${
                       selectedPackage?.id === pkg.id 
                         ? 'border-warning bg-warning/20 ring-2 ring-warning/50' 
@@ -73,7 +73,7 @@ function BuyCoinsModal({ isOpen, onClose, onRequestPaymentMethod }) {
                     <p className="text-lg font-bold text-warning flex items-center justify-center gap-1 font-mono">
                       <Coins size={16} /> {pkg.amount.toLocaleString('pt-BR')}
                     </p>
-                    <p className="text-sm text-text-muted">{pkg.price}</p>
+                    <p className="text-sm text-text-muted cursor-target">{pkg.price}</p>
                   </button>
                 ))}
               </div>
@@ -86,7 +86,7 @@ function BuyCoinsModal({ isOpen, onClose, onRequestPaymentMethod }) {
                 disabled={!selectedPackage || isProcessing}
                 className="bg-accent hover:bg-accent/80 text-black font-semibold py-2 px-6 rounded-md flex items-center gap-2 
                            disabled:bg-gray-500 disabled:cursor-not-allowed
-                           [transform-style:preserve-3d] hover:[transform:translateZ(10px)] active:[transform:translateZ(2px)]"
+                           [transform-style:preserve-3d] hover:[transform:translateZ(10px)] active:[transform:translateZ(2px)] cursor-target"
                 data-augmented-ui="tl-scoop tr-scoop br-scoop bl-scoop"
               >
                 {isProcessing ? <Loader2 className="animate-spin" size={20}/> : <ShoppingCart size={20} />}
