@@ -33,7 +33,7 @@ router.post('/start', async (req, res) => {
     const ROUNDS = Number(req.body.rounds || 5);
     const DURATION = Number(req.body.duration || 20);
 
-    // 1) Reutiliza rodadas existentes (ready/in_progress) se houver
+    // 1) Reutiliza rodadas existentes (ready/playing) se houver
     const qExisting = await supa
       .from('rodada')
       .select('rodada_id, numero_da_rodada, status')
@@ -52,17 +52,17 @@ router.post('/start', async (req, res) => {
         // ATUALIZA O STATUS DA SALA ANTES DE INICIAR A RODADA
         const { error: updateSalaError } = await supa
           .from('sala')
-          .update({ status: 'in_progress' }) // Ou o status que indica jogo ativo
+          .update({ status: 'playing' }) // Ou o status que indica jogo ativo
           .eq('sala_id', sala_id);
         if (updateSalaError) {
-            console.error(`Erro ao atualizar status da sala ${sala_id} para in_progress:`, updateSalaError);
+            console.error(`Erro ao atualizar status da sala ${sala_id} para playing:`, updateSalaError);
             // Considerar se deve retornar erro ou continuar
         }
 
-        // marca como in_progress antes de começar
+        // marca como playing antes de começar
         await supa
           .from('rodada')
-          .update({ status: 'in_progress' })
+          .update({ status: 'playing' })
           .eq('rodada_id', payload.rodada_id);
 
         // Verifica se já existe um timer ativo para esta sala/rodada
@@ -155,17 +155,17 @@ router.post('/start', async (req, res) => {
       // ATUALIZA O STATUS DA SALA ANTES DE INICIAR A RODADA
       const { error: updateSalaError } = await supa
         .from('sala')
-        .update({ status: 'in_progress' }) // Ou o status que indica jogo ativo
+        .update({ status: 'playing' }) // Ou o status que indica jogo ativo
         .eq('sala_id', sala_id);
       if (updateSalaError) {
-          console.error(`Erro ao atualizar status da sala ${sala_id} para in_progress:`, updateSalaError);
+          console.error(`Erro ao atualizar status da sala ${sala_id} para playing:`, updateSalaError);
           // Considerar se deve retornar erro ou continuar
       }
 
       // Atualiza status da RODADA
       await supa
         .from('rodada')
-        .update({ status: 'in_progress' })
+        .update({ status: 'playing' })
         .eq('rodada_id', created[0].rodada_id);
 
       // Emite eventos

@@ -352,14 +352,14 @@ export function scheduleRoundCountdown({ salaId, roundId, duration = 20 }) { //
               await adicionarMoedas(jId, moedasGanhas); //
           }
 
-          // ATUALIZA STATUS DA SALA PARA 'terminada'
-          console.log(`[TIMER->MATCH_END] Atualizando sala ${salaId} para 'terminada'`);
+          // ATUALIZA STATUS DA SALA PARA 'closed'
+          console.log(`[TIMER->MATCH_END] Atualizando sala ${salaId} para 'closed'`);
           const { error: updateSalaError } = await supa
             .from('sala') //
-            .update({ status: 'terminada' }) // Novo status
+            .update({ status: 'closed' }) // Novo status
             .eq('sala_id', salaId); //
           if (updateSalaError) {
-              console.error(`[TIMER] Erro ao atualizar status da sala ${salaId} para terminada:`, updateSalaError);
+              console.error(`[TIMER] Erro ao atualizar status da sala ${salaId} para closed:`, updateSalaError);
           }
 
           io.to(salaId).emit('match:end', { //
@@ -600,14 +600,14 @@ export function initSockets(httpServer) { //
               await adicionarMoedas(jId, moedasGanhas); //
           }
 
-          // ATUALIZA STATUS DA SALA PARA 'terminada'
-          console.log(`[STOP->MATCH_END] Atualizando sala ${salaId} para 'terminada'`);
+          // ATUALIZA STATUS DA SALA PARA 'closed'
+          console.log(`[STOP->MATCH_END] Atualizando sala ${salaId} para 'closed'`);
           const { error: updateSalaStopError } = await supa
             .from('sala') //
-            .update({ status: 'terminada' }) // Novo status
+            .update({ status: 'closed' }) // Novo status
             .eq('sala_id', salaId); //
           if (updateSalaStopError) {
-               console.error(`[STOP] Erro ao atualizar status da sala ${salaId} para terminada:`, updateSalaStopError);
+               console.error(`[STOP] Erro ao atualizar status da sala ${salaId} para closed:`, updateSalaStopError);
           }
 
           io.to(salaId).emit('match:end', { //

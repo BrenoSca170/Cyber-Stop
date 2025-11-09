@@ -1,9 +1,8 @@
 // frontend/src/pages/LobbyScreen.jsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react'; // ATUALIZE O IMPORT
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api'; 
 import PixelBlast from '../components/PixelBlast'; // Importa o componente de fundo
-// import FaultyTerminalR3F from '../components/FaultyTerminalR3F'; // Removido se não estiver sendo usado
 
 export default function LobbyScreen() {
   const nav = useNavigate(); 
@@ -12,9 +11,44 @@ export default function LobbyScreen() {
   const [creating, setCreating] = useState(false); 
   const [joining, setJoining] = useState(false); 
 
+  // --- NOVOS ESTADOS PARA A LISTA DE SALAS ---
+  const [availableRooms, setAvailableRooms] = useState([]);
+  const [loadingRooms, setLoadingRooms] = useState(true);
+
+  // --- NOVO EFFECT PARA BUSCAR SALAS ---
+  useEffect(() => {
+    let isMounted = true;
+    const fetchRooms = async () => {
+      if (!isMounted) return;
+      setLoadingRooms(true);
+      try {
+        const { data } = await api.get('/rooms/available');
+        if (isMounted) {
+          setAvailableRooms(data || []);
+        }
+      } catch (e) {
+        console.error("Erro ao buscar salas disponíveis:", e);
+        // (Opcional) alert("Não foi possível carregar a lista de salas.");
+      } finally {
+        if (isMounted) {
+          setLoadingRooms(false);
+        }
+      }
+    };
+    
+    fetchRooms(); // Busca imediata
+    const intervalId = setInterval(fetchRooms, 5000); // Atualiza a cada 5s
+
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId); // Limpa ao desmontar
+    };
+  }, []); // Roda apenas uma vez no mount
+
   const createRoom = async () => {
     setCreating(true); 
     try {
+      // ... (lógica de criar sala existente, SEM MUDANÇAS) ...
       const { data } = await api.post('/rooms', { nome_sala: roomName || 'Sala do Jogador' }); 
       console.log("API /rooms response:", data);
       if (data && data.host_user) {
@@ -31,20 +65,28 @@ export default function LobbyScreen() {
       }
     } catch (e) {
       console.error("Erro ao criar sala (API /rooms):", e.response?.data || e.message || e);
+      // Exibe o erro específico da verificação multi-sala
       alert(e.response?.data?.error || e.message || "Ocorreu um erro desconhecido ao criar a sala."); 
     } finally {
       setCreating(false); 
     }
   };
 
-  const joinExisting = async () => {
-    if (!roomIdToJoin.trim()) {
+  // --- ATUALIZAR 'joinExisting' PARA ACEITAR UM ID (ou usar o do estado) ---
+  const joinExisting = async (salaIdFromList = null) => {
+    // Usa o ID da lista (se fornecido) ou o ID do campo de input
+    const salaId = salaIdFromList ? Number(salaIdFromList) : Number(roomIdToJoin.trim());
+    
+    if (!salaId) {
       alert('Informe o ID da sala'); 
       return;
     }
+    
     setJoining(true); 
     try {
-      const { data } = await api.post('/rooms/join', { sala_id: Number(roomIdToJoin) }); 
+      // Garante que o ID correto (seja da lista ou input) seja enviado
+      const { data } = await api.post('/rooms/join', { sala_id: Number(salaId) }); 
+      
       console.log("API /rooms/join response:", data);
       if (data && data.guest_user) {
         sessionStorage.setItem('meuJogadorId', String(data.guest_user)); 
@@ -60,6 +102,7 @@ export default function LobbyScreen() {
       }
     } catch (e) {
       console.error("Erro ao entrar na sala (API /rooms/join):", e.response?.data || e.message || e);
+      // Exibe o erro específico da verificação multi-sala
       alert(e.response?.data?.error || e.message || "Ocorreu um erro desconhecido ao entrar na sala."); 
     } finally {
       setJoining(false); 
@@ -83,7 +126,7 @@ export default function LobbyScreen() {
           className="bg-bg-secondary p-6 space-y-4 [transform-style:preserve-3d] transition-transform duration-300 hover:[transform:rotateY(3deg)]"
           data-augmented-ui="tl-clip tr-clip br-clip bl-clip border"
         >
-          
+          {/* ... (Conteúdo de Criar Sala - Sem alteração) ... */}
           <h2 className="text-xl font-semibold mb-3 text-accent [transform:translateZ(10px)]">
             Iniciar Novo Sala
           </h2>
@@ -104,15 +147,43 @@ export default function LobbyScreen() {
           </button>
         </div>
 
-        {/* Divisor "OU" foi removido */}
+        {/* --- NOVA SEÇÃO: LISTA DE SALAS DISPONÍVEIS --- */}
+        <div 
+          className="bg-bg-secondary p-6 space-y-4 [transform-style:preserve-3d] transition-transform duration-300 hover:[transform:rotateY(-3deg)] mt-6"
+          data-augmented-ui="tl-clip tr-clip br-clip bl-clip border"
+        >
+          <h2 className="text-xl font-semibold mb-3 text-accent [transform:translateZ(10px)]">
+            Salas Disponíveis
+          </h2>
+          <div className="max-h-48 overflow-y-auto space-y-2 pr-2 [transform:translateZ(10px)]">
+            {loadingRooms && <p className="text-text-muted">Buscando salas...</p>}
+            {!loadingRooms && availableRooms.length === 0 && (
+              <p className="text-text-muted">Nenhuma sala disponível. Crie uma!</p>
+            )}
+            {availableRooms.map(room => (
+              <button
+                key={room.sala_id}
+                // Chama a função 'joinExisting' passando o ID da sala
+                onClick={() => joinExisting(room.sala_id)} 
+                disabled={joining}
+                className="w-full flex justify-between items-center p-3 bg-bg-input hover:bg-bg-input/70 border border-accent/20 rounded transition-colors disabled:opacity-50 cursor-target"
+              >
+                <span className="font-semibold text-accent">{room.nome_sala} (ID: {room.sala_id})</span>
+                <span className="text-text-muted text-sm">({room.player_count || 0}/2)</span>
+              </button>
+            ))}
+          </div>
+        </div>
+        {/* --- FIM DA NOVA SEÇÃO --- */}
+
 
         {/* Seção para Entrar em Sala Existente com augmented-ui */}
         <div 
-          className="bg-bg-secondary p-6 space-y-4 [transform-style:preserve-3d] transition-transform duration-300 hover:[transform:rotateY(-3deg)] mt-6" // Adicionada margem superior mt-6
+          className="bg-bg-secondary p-6 space-y-4 [transform-style:preserve-3d] transition-transform duration-300 hover:[transform:rotateY(-3deg)] mt-6"
           data-augmented-ui="tl-clip tr-clip br-clip bl-clip border"
         >
           <h2 className="text-xl font-semibold mb-3 text-secondary [transform:translateZ(10px)]">
-            Conectar a uma sala
+            Conectar com ID
           </h2>
           <div className="flex gap-2 [transform:translateZ(10px)]">
             <input
@@ -125,7 +196,9 @@ export default function LobbyScreen() {
             <button
               className="bg-secondary hover:bg-secondary/80 text-black px-6 py-3 rounded font-bold tracking-wider transition-all disabled:bg-gray-500 disabled:cursor-not-allowed
                         [transform-style:preserve-3d] hover:[transform:translateZ(15px)] active:[transform:translateZ(5px)] cursor-target"
-              onClick={joinExisting} 
+              // Chama a função 'joinExisting' sem argumento, 
+              // ela usará o valor do input 'roomIdToJoin'
+              onClick={() => joinExisting()} 
               disabled={joining} 
               data-augmented-ui="tl-scoop tr-scoop br-scoop bl-scoop"
             >
