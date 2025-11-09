@@ -32,7 +32,9 @@ const requireAuth = async (req, res, next) => {
     }
 
     // 4. Anexar o 'jogador' (não o 'user' do supabase) ao request
-    req.user = jogador // Agora 'req.user' será o objeto do jogador
+    req.user = jogador// Agora 'req.user' será o objeto do jogador
+    req.jogadorId = jogador.jogador_id 
+    console.log('[requireAuth] ID do jogador anexado:', req.jogadorId);
     next()
   } catch (e) {
     // Se jwt.verify falhar (expirado, inválido), cai aqui

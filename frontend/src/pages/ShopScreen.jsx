@@ -1,223 +1,336 @@
-// frontend/src/pages/ShopScreen.jsx
+// fronted/src/pages/ShopScreen.jsx
 import { useState, useEffect } from 'react';
-import api from '../lib/api'; 
-import ShopItem from '../components/ShopItem'; 
-import BuyCoinsModal from '../components/BuyCoinsModal';
+import { useNavigate } from 'react-router-dom';
+import api from '../lib/api';
+import { ArrowLeft, Loader2, ShoppingCart, Gem, Package, Info } from 'lucide-react';
+// (NOVO) Importa o PaymentModal
 import PaymentModal from '../components/PaymentModal';
-import { Wallet, Store, Loader2, PlusCircle, Package } from 'lucide-react'; // Ícones
 
-function ShopScreen() {
-  const [moedas, setMoedas] = useState(0); 
-  const [inventario, setInventario] = useState([]); 
-  const [shopItems, setShopItems] = useState([]); 
-  const [loading, setLoading] = useState(true); 
-  const [purchasingId, setPurchasingId] = useState(null); 
-  const [message, setMessage] = useState(''); 
-  const [error, setError] = useState(''); 
-  const [isBuyCoinsModalOpen, setIsBuyCoinsModalOpen] = useState(false);
-  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
-  const [pendingAmount, setPendingAmount] = useState(0);
-  const [pkgPrice, setPkgPrice] = useState('');
+// Um componente interno para o Cartão do Item (Power-up)
+function StoreItemCard({ item, onBuy, isBuying }) {
+  const [isClicked, setIsClicked] = useState(false);
 
-  // ... (NENHUMA alteração na lógica: fetchData, handlePurchase, handleConfirmCoinPurchase) ...
-
-  const fetchData = async () => {
-    setLoading(true); 
-    setMessage(''); 
-    setError('');
-    try {
-      const [itemsRes, inventoryRes] = await Promise.all([
-        api.get('/shop/items'), 
-        api.get('/shop/inventory') 
-      ]);
-      setShopItems(itemsRes.data || []); 
-      setMoedas(inventoryRes.data?.moedas || 0); 
-      setInventario(inventoryRes.data?.inventario || []); 
-
-    } catch (err) {
-      console.error("Erro ao carregar loja ou inventário", err);
-      setError("Não foi possível carregar os dados da loja. Tente recarregar a página."); 
-    } finally {
-      setLoading(false); 
-    }
+  const handleClick = () => {
+    if (isBuying) return;
+    onBuy(item.item_id);
+    setIsClicked(true);
+    setTimeout(() => setIsClicked(false), 300); // Duração da animação
   };
-
-  useEffect(() => {
-    fetchData();
-  }, []); 
-
-  const handlePurchase = async (item) => {
-    setMessage(''); 
-    setError('');
-    if (moedas < item.price) {
-      setError("Saldo insuficiente!");
-      setTimeout(() => setError(''), 3000); 
-      return;
-    }
-    setPurchasingId(item.id); 
-    try {
-      const response = await api.post('/shop/purchase', { power_up_id: item.id });
-      setMoedas(response.data.novo_saldo); 
-      setMessage(`'${item.name}' comprado com sucesso!`); 
-      fetchData(); 
-    } catch (err) {
-      console.error("Erro na compra", err);
-      setError(err.response?.data?.error || "Ocorreu um erro na sua compra.");
-    } finally {
-      setPurchasingId(null); 
-      setTimeout(() => { setMessage(''); setError(''); }, 3000);
-    }
-  };
-
-  const handleConfirmCoinPurchase = async (amount) => {
-    setMessage(''); 
-    setError('');
-    console.log(`Simulando compra de ${amount} moedas...`);
-    try {
-        const response = await api.post('/shop/add-coins', { amount });
-        setMoedas(response.data.novo_saldo); 
-        setMessage(`${amount.toLocaleString('pt-BR')} moedas adicionadas com sucesso!`); 
-        setTimeout(() => setMessage(''), 4000); 
-    } catch (err) {
-        console.error("Erro ao adicionar moedas:", err);
-        setError(err.response?.data?.error || "Ocorreu um erro ao adicionar moedas.");
-        setTimeout(() => setError(''), 4000); 
-    }
-  };
-
-  const handleRequestPaymentMethod = (amount, price) => {
-    setPendingAmount(amount);
-    setPkgPrice(price);
-    setIsPaymentModalOpen(true);
-  };
-
-  // --- Renderização Atualizada ---
-
-  if (loading && shopItems.length === 0) {
-    return (
-      <div className="text-white text-center p-10 flex items-center justify-center gap-2 font-cyber">
-        <Loader2 className="animate-spin text-secondary" /> Carregando Mercado Paralelo...
-      </div>
-    );
-  }
 
   return (
-    // Adicionada fonte e perspectiva
-    <div className="p-4 md:p-8 text-white font-cyber [perspective:1000px]">
-      <div className="max-w-4xl mx-auto">
-        
-        {/* Seção da Carteira com augmented-ui */}
-        <div 
-          className="flex flex-col md:flex-row items-center justify-between bg-bg-secondary p-4 md:p-6 mb-8 gap-4 md:gap-2"
-          data-augmented-ui="tl-clip tr-clip br-clip bl-clip border inlay"
-        >
-          {/* Saldo Atual */}
-          <div className="flex items-center gap-3 md:gap-4 [transform:translateZ(10px)]">
-            <Wallet className="h-8 w-8 md:h-10 md:w-10 text-accent" />
-            <div>
-              <h2 className="text-lg md:text-xl font-bold text-accent">Meus Créditos</h2>
-            </div>
-            <span className="text-2xl md:text-3xl font-bold text-warning flex items-center gap-1 font-mono">
-               {loading ? <Loader2 className="animate-spin h-5 w-5" /> : moedas.toLocaleString('pt-BR')} 
-               <span className="text-sm font-normal text-text-muted">c</span>
-            </span>
-          </div>
-          
-          {/* Botão para Abrir o Modal de Compra de Moedas */}
-          <button 
-            onClick={() => setIsBuyCoinsModalOpen(true)} 
-            className="bg-warning hover:bg-warning/80 text-black font-semibold py-2 px-4 rounded-md flex items-center gap-2 text-sm md:text-base w-full md:w-auto justify-center 
-                       transition-all hover:scale-105 [transform-style:preserve-3d] hover:[transform:translateZ(15px)] active:[transform:translateZ(5px)] cursor-target"
-            data-augmented-ui="tl-scoop tr-scoop br-scoop bl-scoop"
-          >
-            <PlusCircle size={18} /> Adquirir Créditos
-          </button>
-        </div>
-        
-        {/* Mensagens de Feedback */}
-        {message && <div className="text-center mb-4 font-semibold text-accent bg-accent/20 py-2 px-4 rounded">{message}</div>}
-        {error && <div className="text-center mb-4 font-semibold text-primary bg-primary/20 py-2 px-4 rounded">{error}</div>}
-
-        {/* Seção da Loja de Power-ups */}
-        <div className="flex items-center gap-3 md:gap-4 mb-6">
-          <Store className="h-7 w-7 md:h-8 md:w-8 text-primary" />
-          <h1 className="text-3xl md:text-4xl font-bold text-text-header">Mercado Paralelo</h1>
-        </div>
-        
-        {loading && <div className="text-center text-text-muted">Atualizando...</div>}
-
-        {/* Grid com os Itens da Loja */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-          {shopItems.map((item) => {
-            const isBuyingThis = purchasingId === item.power_up_id; 
-            const canAfford = moedas >= item.preco; 
-            return (
-              <ShopItem
-                key={item.power_up_id} 
-                item={{ 
-                    id: item.power_up_id, 
-                    code: item.codigo_identificador, 
-                    name: item.nome,
-                    description: item.descricao,
-                    price: item.preco
-                }}
-                onPurchase={handlePurchase} 
-                canAfford={canAfford && !purchasingId} 
-                isPurchasing={isBuyingThis} 
-              />
-            );
-          })}
-           {!loading && shopItems.length === 0 && (
-              <p className="text-text-muted md:col-span-2 lg:col-span-3 text-center">Nenhum item disponível no Mercado Paralelo no momento.</p>
-           )}
-        </div>
-
-         {/* Seção Inventário Atual */}
-         <div className="mt-12">
-            <h2 className="text-2xl font-bold mb-4 text-secondary flex items-center gap-2">
-              <Package size={24} /> Meu Inventário
-            </h2>
-            <div 
-              className="bg-bg-secondary p-4 rounded-lg" 
-              data-augmented-ui="tl-clip tr-clip br-clip bl-clip border inlay"
-            >
-              {!loading && inventario.length > 0 ? (
-                  <ul className="space-y-2">
-                  {inventario.map(invItem => (
-                      <li key={invItem.power_up_id} className="bg-bg-input p-3 rounded flex justify-between items-center shadow border border-secondary/20">
-                      <span>{invItem.nome} <span className="text-text-muted text-sm hidden sm:inline">({invItem.descricao})</span></span>
-                      <span className="font-bold text-lg text-secondary font-mono">x{invItem.quantidade}</span>
-                      </li>
-                  ))}
-                  </ul>
-              ) : !loading ? (
-                  <p className="text-text-muted/70 italic">Você não possui módulos.</p>
-              ) : (
-                  <div className="text-center text-text-muted"><Loader2 className="animate-spin inline mr-2"/> Carregando inventário...</div>
-              )}
-            </div>
-         </div>
+    <div 
+      className="bg-bg-secondary p-4 border border-primary/50 rounded-lg shadow-lg
+                 flex flex-col justify-between transition-all"
+      data-augmented-ui="tl-clip tr-clip br-clip bl-clip border"
+    >
+      <div>
+        <h3 className="text-xl font-bold text-accent mb-2">{item.nome}</h3>
+        <p className="text-sm text-text-muted mb-3">{item.descricao}</p>
       </div>
-
-      {/* Renderiza o Modal (só é visível quando isBuyCoinsModalOpen é true) */}
-      <BuyCoinsModal 
-        isOpen={isBuyCoinsModalOpen} 
-        onClose={() => setIsBuyCoinsModalOpen(false)} 
-        onRequestPaymentMethod={handleRequestPaymentMethod}
-      />
-      {/* Renderiza o Modal de Pagamento */}
-      <PaymentModal
-        isOpen={isPaymentModalOpen}
-        onClose={() => setIsPaymentModalOpen(false)}
-        onConfirm={(amount) => {
-          handleConfirmCoinPurchase(amount);
-          setIsPaymentModalOpen(false);
-        }}
-        amount={pendingAmount}
-        price={pkgPrice}
-      />
+      <div className="flex justify-between items-center mt-4">
+        <span className="text-lg font-semibold text-warning flex items-center gap-1">
+          <Gem size={16} /> {item.preco}
+        </span>
+        <button
+          onClick={handleClick}
+          disabled={isBuying}
+          className={`px-4 py-2 font-semibold text-black bg-primary rounded
+                      hover:bg-primary/80 transition-all duration-150
+                      disabled:bg-gray-500 disabled:cursor-not-allowed
+                      flex items-center gap-2
+                      ${isClicked ? 'scale-95' : ''}`}
+        >
+          {isBuying ? <Loader2 size={18} className="animate-spin" /> : <ShoppingCart size={18} />}
+          Comprar
+        </button>
+      </div>
     </div>
   );
 }
 
-export default ShopScreen;
+// Um componente interno para o Cartão do Pacote (Moedas)
+function PackageCard({ pkg, onBuy, isBuying }) {
+  const [isClicked, setIsClicked] = useState(false);
+
+  const handleClick = () => {
+    if (isBuying) return;
+    onBuy(pkg.pacote_id);
+    setIsClicked(true);
+    setTimeout(() => setIsClicked(false), 300);
+  };
+
+  return (
+    <div 
+      className="bg-bg-secondary p-4 border border-secondary/50 rounded-lg shadow-lg
+                 flex flex-col justify-between transition-all"
+      data-augmented-ui="tl-clip tr-clip br-clip bl-clip border"
+    >
+      <div>
+        <h3 className="text-xl font-bold text-secondary mb-2">{pkg.nome}</h3>
+        <p className="text-sm text-text-muted mb-1">Receba:</p>
+        <p className="text-2xl font-bold text-warning flex items-center gap-2 mb-3">
+          <Gem size={20} /> {pkg.qtde_moedas}
+        </p>
+      </div>
+      <div className="flex justify-between items-center mt-4">
+        <span className="text-lg font-semibold text-accent">
+          R$ {pkg.preco.toFixed(2).replace('.', ',')}
+        </span>
+        <button
+          onClick={handleClick}
+          disabled={isBuying}
+          className={`px-4 py-2 font-semibold text-black bg-secondary rounded
+                      hover:bg-secondary/80 transition-all duration-150
+                      disabled:bg-gray-500 disabled:cursor-not-allowed
+                      flex items-center gap-2
+                      ${isClicked ? 'scale-95' : ''}`}
+        >
+          {isBuying ? <Loader2 size={18} className="animate-spin" /> : <Package size={18} />}
+          Comprar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Componente Principal da Loja
+export default function ShopScreen() {
+  const navigate = useNavigate();
+  const [tab, setTab] = useState('items'); // 'items' ou 'packages'
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  
+  // Estados da Loja
+  const [storeItems, setStoreItems] = useState([]); // Power-ups à venda
+  const [storePackages, setStorePackages] = useState([]); // Pacotes de moedas à venda
+  
+  // Estado do Jogador
+  const [moedas, setMoedas] = useState(0); // Saldo atual de moedas
+  
+  // Estado de Compra
+  const [buyingId, setBuyingId] = useState(null); // ID do item/pacote sendo comprado
+  
+  // (NOVO) Estados para o Modal de Pagamento
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [paymentDetails, setPaymentDetails] = useState(null); // { compra_pacote_id, amount, price }
+
+  // Função para carregar todos os dados da loja e do jogador
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      setError('');
+
+      // 1. Busca o inventário (saldo de moedas)
+      const invPromise = api.get('/shop/inventory');
+      // 2. Busca os itens (power-ups) à venda
+      const itemsPromise = api.get('/shop/store-items');
+      // 3. Busca os pacotes de moedas à venda
+      const packagesPromise = api.get('/shop/store-packages');
+
+      const [invRes, itemsRes, packagesRes] = await Promise.all([
+        invPromise,
+        itemsPromise,
+        packagesPromise,
+      ]);
+
+      setMoedas(invRes.data?.moedas || 0);
+      setStoreItems(itemsRes.data || []);
+      setStorePackages(packagesRes.data || []);
+
+    } catch (err) {
+      console.error('Erro ao carregar dados da loja:', err);
+      setError(err.response?.data?.error || 'Falha ao carregar loja. Tente novamente.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Carrega os dados quando o componente é montado
+  useEffect(() => {
+    fetchData();
+  }, []);
+  
+  // (NOVO) Handlers para o Modal de Pagamento
+  const closePaymentModal = () => {
+      setIsPaymentModalOpen(false);
+      setPaymentDetails(null);
+  };
+
+  const handleConfirmPayment = (confirmedAmount) => {
+      // Esta função é chamada pelo PaymentModal após a "simulação" de sucesso
+      console.log(`Pagamento de ${confirmedAmount} moedas confirmado (Simulação).`);
+      // Em um sistema real, aqui você chamaria a API para confirmar o webhook do pagamento.
+      // O ideal é recarregar o inventário para atualizar o saldo
+      alert(`Pagamento de ${confirmedAmount} moedas confirmado (Simulação). Lembre-se que no mundo real, o backend faria esta confirmação.`);
+      fetchData(); 
+  };
+
+
+  // Handler para comprar um Item (Power-up)
+  const handleBuyItem = async (itemId) => {
+    if (buyingId) return; // Já está comprando algo
+    setBuyingId(itemId);
+    setError('');
+
+    try {
+      await api.post('/shop/buy-item', { item_id: itemId });
+      // Sucesso! Atualiza o saldo de moedas
+      await fetchData(); // Recarrega tudo para simplicidade
+      alert('Compra realizada com sucesso!');
+    } catch (err) {
+      console.error('Erro ao comprar item:', err);
+      setError(err.response?.data?.error || 'Saldo de moedas insuficiente ou falha na transação.');
+    } finally {
+      setBuyingId(null);
+    }
+  };
+
+  // Handler para comprar um Pacote (Moedas)
+  const handleBuyPackage = async (packageId) => {
+    if (buyingId) return;
+    setBuyingId(packageId);
+    setError('');
+
+    // (NOVO) 1. Encontra os detalhes do pacote no estado local
+    const pkg = storePackages.find(p => p.pacote_id === packageId);
+    if (!pkg) {
+        setError('Detalhes do pacote não encontrados.');
+        setBuyingId(null);
+        return;
+    }
+
+    try {
+      // 2. Chama a API para registrar o pedido como PENDENTE (backend/routes/shop.js)
+      const { data } = await api.post('/shop/buy-package', { pacote_id: packageId });
+      // data.compra_pacote_id é o ID da transação
+      
+      // (ATUALIZADO) 3. Abre o modal de pagamento, passando os dados necessários
+      setPaymentDetails({
+          compra_pacote_id: data.compra_pacote_id,
+          amount: pkg.qtde_moedas,
+          price: pkg.preco, 
+      });
+      setIsPaymentModalOpen(true);
+
+    } catch (err) {
+      console.error('Erro ao comprar pacote:', err);
+      setError(err.response?.data?.error || 'Falha ao iniciar compra.');
+    } finally {
+      setBuyingId(null);
+    }
+  };
+
+  return (
+    <div className="relative flex flex-col min-h-[calc(100vh-120px)] text-white p-4 font-cyber">
+      {/* Cabeçalho e Botão Voltar */}
+      <header className="flex items-center justify-between mb-6 px-2">
+        <button
+          onClick={() => navigate('/lobby')}
+          className="text-text-muted hover:text-primary transition-colors flex items-center gap-1 text-sm cursor-target"
+          title="Voltar ao Lobby"
+        >
+          <ArrowLeft size={16} />
+          Voltar
+        </button>
+
+        <h1 className="text-3xl md:text-4xl font-bold text-center text-accent">
+          LOJA
+        </h1>
+
+        {/* Saldo de Moedas */}
+        <div className="bg-bg-secondary border border-warning/50 rounded px-4 py-2 flex items-center gap-2">
+          <span className="text-lg font-semibold text-warning">{moedas}</span>
+          <Gem size={20} className="text-warning" />
+        </div>
+      </header>
+
+      {/* Abas de Navegação */}
+      <nav className="flex justify-center gap-4 mb-6">
+        <button
+          onClick={() => setTab('items')}
+          className={`px-6 py-2 text-lg font-semibold rounded-t-lg transition-colors
+                      ${tab === 'items' ? 'bg-primary text-black' : 'bg-bg-secondary text-primary/70 hover:bg-bg-input'}`}
+        >
+          Itens (Power-ups)
+        </button>
+        <button
+          onClick={() => setTab('packages')}
+          className={`px-6 py-2 text-lg font-semibold rounded-t-lg transition-colors
+                      ${tab === 'packages' ? 'bg-secondary text-black' : 'bg-bg-input text-secondary/70 hover:bg-bg-input'}`}
+        >
+          Pacotes (Moedas)
+        </button>
+      </nav>
+
+      {/* Mensagem de Erro Global */}
+      {error && (
+        <div className="bg-red-900 border border-red-500 text-red-200 p-3 rounded-lg text-center mb-4">
+          {error}
+        </div>
+      )}
+
+      {/* Conteúdo da Loja */}
+      {loading ? (
+        <div className="flex justify-center items-center py-20">
+          <Loader2 size={40} className="animate-spin text-primary" />
+        </div>
+      ) : (
+        <div className="w-full max-w-5xl mx-auto">
+          {/* Aba de Itens (Power-ups) */}
+          {tab === 'items' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {storeItems.length > 0 ? (
+                storeItems.map(item => (
+                  <StoreItemCard 
+                    key={item.item_id}
+                    item={item}
+                    onBuy={handleBuyItem}
+                    isBuying={buyingId === item.item_id}
+                  />
+                ))
+              ) : (
+                <p className="text-text-muted col-span-full text-center">Nenhum item à venda no momento.</p>
+              )}
+            </div>
+          )}
+
+          {/* Aba de Pacotes (Moedas) */}
+          {tab === 'packages' && (
+            <div>
+              <div className="bg-blue-900/50 border border-blue-400 text-blue-200 p-3 rounded-lg text-center mb-6 flex items-center gap-2">
+                  <Info size={20} />
+                  <span>A compra de pacotes é simulada. Nenhum valor real será cobrado.</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {storePackages.length > 0 ? (
+                  storePackages.map(pkg => (
+                    <PackageCard 
+                      key={pkg.pacote_id}
+                      pkg={pkg}
+                      onBuy={handleBuyPackage}
+                      isBuying={buyingId === pkg.pacote_id}
+                    />
+                  ))
+                ) : (
+                  <p className="text-text-muted col-span-full text-center">Nenhum pacote à venda no momento.</p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* (NOVO) Renderiza o PaymentModal */}
+      {paymentDetails && (
+          <PaymentModal
+              isOpen={isPaymentModalOpen}
+              onClose={closePaymentModal}
+              onConfirm={handleConfirmPayment}
+              amount={paymentDetails.amount}
+              // Passamos o preço formatado, como a PackageCard faz
+              price={paymentDetails.price.toFixed(2).replace('.', ',')} 
+          />
+      )}
+    </div>
+  );
+}

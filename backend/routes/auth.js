@@ -60,6 +60,13 @@ router.post('/register', async (req, res) => {
     if (ins.error) throw ins.error
 
     const jogador = ins.data
+    const { error: rpcError } = await supa.rpc('dar_itens_iniciais', {
+      p_jogador_id: jogador.jogador_id // Usa o ID do jogador recém-criado
+    });
+
+    if (rpcError) {
+      console.error(`Erro ao dar itens iniciais para jogador ${jogador.jogador_id}:`, rpcError.message);
+    }
     const token = jwt.sign({ sub: jogador.jogador_id }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN })
 
     res.json({ token, jogador })

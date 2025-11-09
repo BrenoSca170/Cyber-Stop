@@ -1,184 +1,104 @@
 // backend/routes/matches.js
-import { Router } from 'express';
-import { supa } from '../services/supabase.js';
-import { getIO, scheduleRoundCountdown, getTimerTimeLeft } from '../src/sockets.js';
-import { buildRoundPayload, generateCoherentRounds } from '../services/game.js';
+import express from 'express'
+import { supa } from '../services/supabase.js'
+import requireAuth from '../middlewares/requireAuth.js'
+// (NOVO) Importar getIO e a nova função
+import { getIO } from '../src/sockets.js'
+import { prepararRodada } from '../services/game.js'
 
-const router = Router();
+const router = express.Router()
 
-// helper: garante tempo_id para uma duração
-async function ensureTempoId(durationSeconds) {
-  let { data, error } = await supa
-    .from('tempo')
-    .select('tempo_id, valor')
-    .eq('valor', durationSeconds)
-    .maybeSingle();
-  if (error) throw error;
-  if (data) return data.tempo_id;
+// Rota para iniciar uma partida (mudar status da sala, carregar 1ª rodada)
+router.post('/start', requireAuth, async (req, res) => {
+  const { sala_id } = req.body
+  const jogadorId = req.jogadorId
 
-  const ins = await supa
-    .from('tempo')
-    .insert({ valor: durationSeconds })
-    .select('tempo_id')
-    .maybeSingle();
-  if (ins.error) throw ins.error;
-  return ins.data.tempo_id;
-}
-
-router.post('/start', async (req, res) => {
-  try {
-    const sala_id = Number(req.body.sala_id);
-    if (!sala_id) throw new Error('sala_id é obrigatório');
-
-    const ROUNDS = Number(req.body.rounds || 5);
-    const DURATION = Number(req.body.duration || 20);
-
-    // 1) Reutiliza rodadas existentes (ready/playing) se houver
-    const qExisting = await supa
-      .from('rodada')
-      .select('rodada_id, numero_da_rodada, status')
-      .eq('sala_id', sala_id)
-      .not('status', 'eq', 'done') // ignora partidas já encerradas
-      .order('numero_da_rodada', { ascending: true });
-
-    if (qExisting.error) throw qExisting.error;
-
-    if ((qExisting.data || []).length > 0) {
-      const first = qExisting.data[0];
-      const io = getIO();
-      if (io) {
-        const payload = await buildRoundPayload(first.rodada_id);
-
-        // ATUALIZA O STATUS DA SALA ANTES DE INICIAR A RODADA
-        const { error: updateSalaError } = await supa
-          .from('sala')
-          .update({ status: 'playing' }) // Ou o status que indica jogo ativo
-          .eq('sala_id', sala_id);
-        if (updateSalaError) {
-            console.error(`Erro ao atualizar status da sala ${sala_id} para playing:`, updateSalaError);
-            // Considerar se deve retornar erro ou continuar
-        }
-
-        // marca como playing antes de começar
-        await supa
-          .from('rodada')
-          .update({ status: 'playing' })
-          .eq('rodada_id', payload.rodada_id);
-
-        // Verifica se já existe um timer ativo para esta sala/rodada
-        const activeTimer = getTimerTimeLeft(sala_id, payload.rodada_id);
-        
-        if (activeTimer && activeTimer.timeLeft > 0) {
-          // Timer já existe e está ativo - não reinicia, apenas envia o estado atual
-          console.log(`[MATCHES/START] Timer ativo encontrado para sala ${sala_id}, rodada ${payload.rodada_id}. Tempo restante: ${activeTimer.timeLeft}s`);
-          io.to(String(sala_id)).emit('round:ready', payload);
-          io.to(String(sala_id)).emit('round:started', { roundId: payload.rodada_id, duration: activeTimer.timeLeft });
-          // Não chama scheduleRoundCountdown aqui - o timer já está rodando
-        } else {
-          // Timer não existe ou já expirou - cria um novo timer
-          console.log(`[MATCHES/START] Criando novo timer para sala ${sala_id}, rodada ${payload.rodada_id}, duração ${DURATION}s`);
-          io.to(String(sala_id)).emit('round:ready', payload);
-          io.to(String(sala_id)).emit('round:started', { roundId: payload.rodada_id, duration: DURATION });
-          scheduleRoundCountdown({ salaId: sala_id, roundId: payload.rodada_id, duration: DURATION });
-        }
-      }
-      return res.json({ ok: true, reused: true });
-    }
-
-    // 2) Precisa de pelo menos 2 jogadores na sala
-    const qPlayersJS = await supa.from('jogador_sala').select('jogador_id').eq('sala_id', sala_id);
-
-    const ids = (qPlayersJS.data || []).map(r => Number(r.jogador_id));
-    const unique = [...new Set(ids)].filter(Boolean);
-
-    if (unique.length < 2) {
-      return res.status(400).json({ error: 'A sala precisa ter exatamente 2 jogadores para iniciar a partida.' });
-    }
-    if (unique.length > 2) {
-      return res.status(400).json({ error: 'A sala tem mais jogadores do que o permitido. Máximo de 2 jogadores.' });
-    }
-
-    // 3) Tempo configurado para as rodadas
-    const tempo_id = await ensureTempoId(DURATION);
-
-    // 4) NOVO SORTEIO COERENTE (letra com ≥4 temas; 4 temas com palavras)
-    const roundsInfo = await generateCoherentRounds({ totalRounds: ROUNDS });
-
-    console.log('[SORTEIO_COERENTE]', {
-    sala_id,
-    rounds: roundsInfo.map((r, i) => ({
-      n: i + 1,
-      letra_id: r.letra_id,
-      letra: r.letra_char,
-      temas: r.temas.map(t => `${t.tema_id}:${t.tema_nome}`)
-      }))
-    });
-
-    // 5) Persistir rodadas e temas sorteados
-    const created = [];
-    for (let i = 0; i < Math.min(roundsInfo.length, ROUNDS); i++) {
-      const { letra_id, letra_char, temas } = roundsInfo[i];
-
-      const ins = await supa
-        .from('rodada')
-        .insert({
-          sala_id,
-          numero_da_rodada: i + 1,
-          letra_id,
-          tempo_id,
-          status: 'ready'
-        })
-        .select('rodada_id')
-        .maybeSingle();
-      if (ins.error) throw ins.error;
-      const rodada_id = ins.data.rodada_id;
-
-      // vincula temas
-      const payloadTema = temas.map(t => ({
-        rodada_id,
-        tema_id: t.tema_id
-      }));
-      const insTema = await supa.from('rodada_tema').insert(payloadTema);
-      if (insTema.error) throw insTema.error;
-
-      created.push({
-        rodada_id,
-        sala_id,
-        letra: letra_char,
-        temas: temas.map(t => ({ id: t.tema_id, nome: t.tema_nome }))
-      });
-    }
-
-    // 6) Dispara primeira rodada via Socket.IO
-    const io = getIO();
-    if (io && created.length) {
-      // ATUALIZA O STATUS DA SALA ANTES DE INICIAR A RODADA
-      const { error: updateSalaError } = await supa
-        .from('sala')
-        .update({ status: 'playing' }) // Ou o status que indica jogo ativo
-        .eq('sala_id', sala_id);
-      if (updateSalaError) {
-          console.error(`Erro ao atualizar status da sala ${sala_id} para playing:`, updateSalaError);
-          // Considerar se deve retornar erro ou continuar
-      }
-
-      // Atualiza status da RODADA
-      await supa
-        .from('rodada')
-        .update({ status: 'playing' })
-        .eq('rodada_id', created[0].rodada_id);
-
-      // Emite eventos
-      io.to(String(sala_id)).emit('round:ready', created[0]);
-      io.to(String(sala_id)).emit('round:started', { roundId: created[0].rodada_id, duration: DURATION });
-      scheduleRoundCountdown({ salaId: sala_id, roundId: created[0].rodada_id, duration: DURATION });
-    }
-
-    return res.json({ ok: true, rounds: created });
-  } catch (e) {
-    console.error('/matches/start failed', e);
-    res.status(500).json({ error: e.message });
+  if (!sala_id) {
+    return res.status(400).json({ error: 'ID da sala é obrigatório' })
   }
-});
 
-export default router;
+  try {
+    // 1. Verifica se o usuário é o criador da sala
+    const { data: salaData, error: salaError } = await supa
+      .from('sala')
+      .select('jogador_criador_id, status')
+      .eq('sala_id', sala_id)
+      .single()
+
+    if (salaError) throw salaError
+    if (!salaData) {
+      return res.status(404).json({ error: 'Sala não encontrada' })
+    }
+    if (salaData.jogador_criador_id !== jogadorId) {
+      return res.status(403).json({ error: 'Apenas o criador pode iniciar a partida' })
+    }
+    if (salaData.status !== 'open') {
+      return res.status(400).json({ error: 'Esta partida não está aberta ou já foi iniciada' })
+    }
+
+    // 2. Busca a *primeira* rodada da sala
+    const { data: firstRound, error: roundError } = await supa
+      .from('rodada')
+      .select('rodada_id, tempo:tempo_id(valor), letra:letra_id(letra_caractere), rodada_tema(tema:tema_id(tema_id, tema_nome))')
+      .eq('sala_id', sala_id)
+      .order('numero_da_rodada', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+      
+    if (roundError) throw roundError
+    if (!firstRound) {
+        return res.status(500).json({ error: 'Nenhuma rodada encontrada para esta sala' })
+    }
+
+    // 3. (NOVO) CHAMA A FUNÇÃO DE PREPARAÇÃO DA RODADA
+    // Isso popula jogador_sala_rodada e participacao_rodada_tema
+    try {
+        await prepararRodada(firstRound.rodada_id, sala_id);
+    } catch (err) {
+        console.error(`[API /start] Falha ao preparar a primeira rodada:`, err);
+        return res.status(500).json({ error: 'Falha ao preparar a partida. Tente novamente.' });
+    }
+
+    // 4. Atualiza o status da sala para 'playing'
+    const { error: updateError } = await supa
+      .from('sala')
+      .update({ status: 'playing' })
+      .eq('sala_id', sala_id)
+
+    if (updateError) throw updateError
+
+    // 5. Formata o payload da primeira rodada para o frontend
+    const payload = {
+        rodada_id: firstRound.rodada_id,
+        letra: firstRound.letra.letra_caractere,
+        temas: firstRound.rodada_tema.map(rt => ({
+            id: rt.tema.tema_id,
+            nome: rt.tema.tema_nome
+        })),
+        duration: firstRound.tempo.valor || 20
+    }
+
+    // 6. Emite o evento para a sala via Socket.IO
+    const io = getIO() // Pega a instância do IO
+    if (io) {
+      const salaIdStr = String(sala_id)
+      console.log(`[API /start] Emitindo 'round:ready' e 'round:started' para sala ${salaIdStr}`);
+      // Emite 'round:ready' (para carregar dados)
+      io.to(salaIdStr).emit('round:ready', payload)
+      // Emite 'round:started' (para iniciar timer) - *scheduleRoundCountdown* será chamado pelo frontend
+      // Mas vamos chamar o scheduleRoundCountdown aqui também para garantir
+      io.to(salaIdStr).emit('round:started', { roundId: payload.rodada_id, duration: payload.duration });
+      
+      // (REMOVIDO - Deixar o 'round:started' do 'useGameSocket' no frontend cuidar disso)
+      // scheduleRoundCountdown({ salaId: salaIdStr, roundId: payload.rodada_id, duration: payload.duration });
+    }
+
+    res.status(200).json({ message: 'Partida iniciada com sucesso', firstRound: payload })
+
+  } catch (error) {
+    console.error('Erro ao iniciar partida:', error.message)
+    res.status(500).json({ error: error.message || 'Erro interno do servidor' })
+  }
+})
+
+export default router
