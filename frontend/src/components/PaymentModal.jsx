@@ -262,8 +262,10 @@ function PaymentModal({ isOpen, onClose, onConfirm, amount, price }) {
                 // Condição de 'disabled' corrigida
                 disabled={!selectedMethod || isProcessing || isCardFormInvalid}
                 className="bg-accent hover:bg-accent/80 text-black font-semibold py-2 px-6 rounded-md flex items-center gap-2
-                           disabled:bg-gray-500 disabled:cursor-not-allowed [transform-style:preserve-3d] hover:[transform:translateZ(10px)] active:[transform:translateZ(2px)] 
-                           cursor-target"
+                           disabled:bg-gray-500 disabled:cursor-not-allowed [transform-style:preserve-3d] 
+                           [transform:translateZ(0px)]
+                           hover:[transform:translateZ(10px)] active:[transform:translateZ(2px)] 
+                           cursor-target relative z-10"
               >
                 {isProcessing ? <Loader2 className="animate-spin" size={20}/> : 'Finalizar Compra'}
               </button>

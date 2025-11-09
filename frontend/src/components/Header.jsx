@@ -76,11 +76,21 @@ export default function Header() {
 
 
   const handleLogout = () => {
-    // (NOVO) Lógica de logout movida para cá
+    // Desconecta o socket primeiro
+    if (socket.connected) {
+      socket.disconnect();
+    }
+    
+    // Limpa todos os dados de autenticação
     localStorage.removeItem('token');
-    api.defaults.headers.common['Authorization'] = undefined;
-    socket.disconnect();
-    navigate('/');
+    localStorage.removeItem('meuJogadorId');
+    sessionStorage.removeItem('meuJogadorId');
+    
+    // Remove o header de autorização da API
+    delete api.defaults.headers.common['Authorization'];
+    
+    // Navega diretamente para a página de login (replace: true evita voltar com back button)
+    navigate('/login', { replace: true });
   };
 
   // Enquanto busca o usuário, pode mostrar um estado simplificado

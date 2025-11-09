@@ -81,7 +81,6 @@ export async function buildRoundPayload(rodadaId) {
   return { ...core, temas }
 }
 
-// (Manter esta função, pois é usada por getRoundResults)
 async function getTemasDaRodada(rodadaId) {
   const { data, error } = await supa
     .from('rodada_tema')
@@ -126,124 +125,79 @@ export async function getNextRoundForSala({ salaId, afterRoundId }) {
   return await buildRoundPayload(proxima.rodada_id)
 }
 
-/* ================================================================
-   == (NOVO) FUNÇÕES DE PREPARAÇÃO DE RODADA (Passo 2 e 3) ==
-================================================================ */
-
-/**
- * Prepara uma rodada para ser jogada, populando as tabelas de participação.
- * Esta função DEVE ser chamada antes de emitir 'round:ready' ou 'round:started'.
- * @param {number} rodadaId - O ID da rodada que está começando.
- * @param {number} salaId - O ID da sala onde a rodada ocorre.
- */
-export async function prepararRodada(rodadaId, salaId) {
-    console.log(`[PREPARAR RODADA] Preparando rodada ${rodadaId} para sala ${salaId}`);
-    
-    // 1. Buscar todos os 'jogador_sala_id' ativos na sala
-    const { data: jogadoresNaSala, error: errJogadores } = await supa
-        .from('jogador_sala')
-        .select('jogador_sala_id, jogador_id')
-        .eq('sala_id', salaId)
-        .eq('status_jogador', 'jogando'); // Garante que só pega jogadores ativos
-
-    if (errJogadores) {
-        console.error('[PREPARAR RODADA] Erro ao buscar jogadores na sala:', errJogadores);
-        throw errJogadores;
+/* =========================
+   Scoring helpers
+========================= */
+async function ensurePlaceholders({ rodadaId, jogadores, temas }) {
+  const rows = []
+  for (const jog of jogadores) {
+    for (const t of temas) {
+      rows.push({
+        rodada_id: rodadaId,
+        jogador_id: jog,
+        tema_nome: t.tema_nome,
+        resposta: '',
+        pontos: 0
+      })
     }
-    if (!jogadoresNaSala || jogadoresNaSala.length === 0) {
-        console.warn(`[PREPARAR RODADA] Nenhum jogador ativo encontrado para sala ${salaId}.`);
-        return; // Nada a fazer
-    }
-     console.log(`[PREPARAR RODADA] Encontrados ${jogadoresNaSala.length} jogadores.`);
-
-    // 2. Buscar todos os 'rodada_tema_id' para esta rodada
-    const { data: temasDaRodada, error: errTemas } = await supa
-        .from('rodada_tema')
-        .select('rodada_tema_id')
-        .eq('rodada_id', rodadaId);
-
-    if (errTemas) {
-        console.error('[PREPARAR RODADA] Erro ao buscar temas da rodada:', errTemas);
-        throw errTemas;
-    }
-    if (!temasDaRodada || temasDaRodada.length === 0) {
-        console.warn(`[PREPARAR RODADA] Rodada ${rodadaId} não tem temas. Abortando.`);
-        return; // Nada a fazer
-    }
-    console.log(`[PREPARAR RODADA] Encontrados ${temasDaRodada.length} temas.`);
-
-    // 3. Popular 'jogador_sala_rodada'
-    const insertsJSR = jogadoresNaSala.map(js => ({
-        jogador_sala: js.jogador_sala_id,
-        rodada_id: rodadaId
-    }));
-
-    const { data: dadosJSR, error: errJSR } = await supa
-        .from('jogador_sala_rodada')
-        .insert(insertsJSR)
-        .select('jogador_sala_rodada_id, jogador_sala') // Precisa dos IDs de volta
-        .order('jogador_sala_rodada_id', { ascending: true }); // Garante ordem consistente
-
-    if (errJSR) {
-        // Lidar com o caso de já existir (ex: reconexão, F5)
-        if (errJSR.code === '23505') { // unique_violation
-            console.warn(`[PREPARAR RODADA] 'jogador_sala_rodada' já populado para rodada ${rodadaId}.`);
-            // Se já existe, busca os dados existentes
-            const { data: existingJSR, error: fetchErr } = await supa
-                .from('jogador_sala_rodada')
-                .select('jogador_sala_rodada_id, jogador_sala')
-                .eq('rodada_id', rodadaId);
-            if (fetchErr) throw fetchErr;
-            // Chama o próximo passo com os dados existentes
-            await popularParticipacaoTema(existingJSR, temasDaRodada);
-        } else {
-            console.error('[PREPARAR RODADA] Erro ao inserir em jogador_sala_rodada:', errJSR);
-            throw errJSR;
-        }
-    } else {
-         // Chama o próximo passo com os dados recém-inseridos
-        await popularParticipacaoTema(dadosJSR, temasDaRodada);
-    }
+  }
+  if (!rows.length) return
+  const up = await supa
+    .from('participacao_rodada')
+    .upsert(rows, {
+      onConflict: 'rodada_id,jogador_id,tema_nome',
+      ignoreDuplicates: true
+    })
+  if (up.error) throw up.error
 }
 
-/**
- * (Função Auxiliar) Popula participacao_rodada_tema com "slots" vazios.
- * @param {Array} dadosJSR - Array de {jogador_sala_rodada_id, jogador_sala}
- * @param {Array} temasDaRodada - Array de {rodada_tema_id}
- */
-async function popularParticipacaoTema(dadosJSR, temasDaRodada) {
-     console.log(`[PREPARAR RODADA] Populando 'participacao_rodada_tema'...`);
-     const insertsPRT = [];
-     for (const jsr of dadosJSR) {
-        for (const tema of temasDaRodada) {
-            insertsPRT.push({
-                jogador_sala_rodada_id: jsr.jogador_sala_rodada_id,
-                rodada_tema_id: tema.rodada_tema_id,
-                status: 'aguardando', // Status inicial
-                pontos: 0,
-                data_hora_validacao: new Date().toISOString() // Preenche com now()
-            });
-        }
-     }
-
-     if (insertsPRT.length === 0) return;
-
-     const { error: errPRT } = await supa
-        .from('participacao_rodada_tema')
-        .insert(insertsPRT)
-        .onConflict('jogador_sala_rodada_id, rodada_tema_id') // Evita erro se já existir
-        .ignore(); // Ignora duplicatas
-     
-     if (errPRT) {
-          // '23505' (unique_violation) é ignorado pelo onConflict
-          console.error('[PREPARAR RODADA] Erro ao inserir em participacao_rodada_tema:', errPRT.message);
-     }
-     console.log(`[PREPARAR RODADA] 'participacao_rodada_tema' populado com ${insertsPRT.length} slots.`);
+async function loadRespostasRodada({ rodadaId, jogadores, temas }) {
+  const { data, error } = await supa
+    .from('participacao_rodada')
+    .select('jogador_id, tema_nome, resposta, pontos')
+    .eq('rodada_id', rodadaId)
+    .in('jogador_id', jogadores)
+    .in('tema_nome', temas.map(t => t.tema_nome))
+  if (error) throw error
+  const map = {}
+  for (const r of data || []) {
+    map[r.tema_nome] ||= {}
+    map[r.tema_nome][r.jogador_id] = { resposta: r.resposta || '', pontos: r.pontos || 0 }
+  }
+  return map
 }
 
-/* ================================================================
-   == (REESCRITO) SCORING HELPERS (Passo 5) ==
-================================================================ */
+async function savePontuacao({ rodadaId, temaNome, jogadorId, pontos }) {
+  const { error } = await supa
+    .from('participacao_rodada')
+    .update({ pontos })
+    .eq('rodada_id', rodadaId)
+    .eq('tema_nome', temaNome)
+    .eq('jogador_id', jogadorId)
+  if (error) throw error
+}
+
+async function computeTotaisSala({ salaId }) {
+  const qRounds = await supa
+    .from('rodada')
+    .select('rodada_id')
+    .eq('sala_id', salaId)
+  if (qRounds.error) throw qRounds.error
+  const rodadaIds = (qRounds.data || []).map(r => r.rodada_id)
+  if (!rodadaIds.length) return {}
+
+  const qPart = await supa
+    .from('participacao_rodada')
+    .select('jogador_id, pontos, rodada_id')
+    .in('rodada_id', rodadaIds)
+  if (qPart.error) throw qPart.error
+
+  const totais = {}
+  for (const r of qPart.data || []) {
+    totais[r.jogador_id] = (totais[r.jogador_id] || 0) + (r.pontos || 0)
+  }
+  return totais
+}
 
 /**
  * Carrega o dicionário (resposta_base) para a letra da rodada
@@ -269,320 +223,216 @@ async function loadLexiconMap({ temaIds, letraId }) {
   return map
 }
 
-// (NOVA) Função auxiliar para buscar os dados de participação
-async function getParticipacaoData(rodadaId, salaId) {
-    // 1. Pega todos os 'jogador_sala_rodada_id' da rodada E mapeia para jogador_id
-    const { data: jsrData, error: jsrError } = await supa
-        .from('jogador_sala_rodada')
-        .select('jogador_sala_rodada_id, jogador_sala!inner(jogador_id, sala_id)')
-        .eq('rodada_id', rodadaId)
-        .eq('jogador_sala.sala_id', salaId); // Filtra pela sala
-    
-    if (jsrError) throw jsrError;
-
-    const jsrIds = jsrData.map(j => j.jogador_sala_rodada_id);
-    const jogadorMap = jsrData.reduce((acc, j) => {
-        acc[j.jogador_sala_rodada_id] = j.jogador_sala.jogador_id;
-        return acc;
-    }, {}); // Mapa de { jsr_id -> jogador_id }
-
-    // 2. Pega todos os 'rodada_tema_id' e 'tema_nome' da rodada
-    const { data: temasData, error: temasError } = await supa
-        .from('rodada_tema')
-        .select('rodada_tema_id, tema:tema_id(tema_id, tema_nome)')
-        .eq('rodada_id', rodadaId);
-
-    if (temasError) throw temasError;
-    
-    const temaMap = temasData.reduce((acc, t) => {
-        acc[t.rodada_tema_id] = t.tema.tema_nome;
-        return acc;
-    }, {}); // Mapa de { rt_id -> tema_nome }
-    const temaNomeMap = temasData.reduce((acc, t) => {
-        acc[t.tema.tema_nome] = t.rodada_tema_id;
-        return acc;
-    }, {}); // Mapa de { tema_nome -> rt_id }
-
-    // 3. Pega todas as respostas (participacao_rodada_tema)
-    const { data: respostasData, error: respError } = await supa
-        .from('participacao_rodada_tema')
-        .select('resposta_id, jogador_sala_rodada_id, rodada_tema_id, resposta_do_jogador_normalizada')
-        .in('jogador_sala_rodada_id', jsrIds);
-    
-    if (respError) throw respError;
-
-    // 4. Monta o mapa de respostas
-    // Formato: { [tema_nome]: { [jogador_id]: { resposta_norm, resposta_id } } }
-    const mapaRespostas = {};
-    for (const tema of temasData) {
-        mapaRespostas[tema.tema.tema_nome] = {};
-    }
-
-    for (const resp of respostasData) {
-        const temaNome = temaMap[resp.rodada_tema_id];
-        const jogadorId = jogadorMap[resp.jogador_sala_rodada_id];
-        if (temaNome && jogadorId) {
-            mapaRespostas[temaNome][jogadorId] = {
-                norm: resp.resposta_do_jogador_normalizada || '',
-                resposta_id: resp.resposta_id // ID da linha em 'participacao_rodada_tema'
-            };
-        }
-    }
-    return { mapaRespostas, temaMap, temaNomeMap, jogadorMap, jsrIds, temasData };
-}
-
-// (NOVA) Função para salvar a pontuação
-async function saveNewPontuacao(updates) {
-    // 'updates' deve ser um array de { resposta_id: id, pontos: p }
-    const updatePromises = updates.map(u =>
-        supa
-            .from('participacao_rodada_tema')
-            .update({ pontos: u.pontos, status: 'validada' }) // Atualiza status e pontos
-            .eq('resposta_id', u.resposta_id)
-    );
-    
-    const results = await Promise.allSettled(updatePromises);
-    
-    results.forEach((result, index) => {
-        if (result.status === 'rejected') {
-            console.error(`[saveNewPontuacao] Erro ao salvar pontuação para resposta_id ${updates[index].resposta_id}:`, result.reason);
-        }
-    });
-}
-
-
-// (NOVA) Função para calcular totais
-async function computeNewTotaisSala({ salaId }) {
-    // Esta query junta 5 tabelas.
-    const { data, error } = await supa
-        .from('participacao_rodada_tema')
-        .select(`
-            pontos,
-            jogador_sala_rodada:jogador_sala_rodada_id (
-                jogador_sala:jogador_sala (
-                    jogador_id,
-                    sala_id
-                )
-            )
-        `)
-        .eq('jogador_sala_rodada.jogador_sala.sala_id', salaId); // Filtra pela sala
-
-    if (error) throw error;
-    
-    const totais = {};
-    for (const r of data || []) {
-        if (r.pontos > 0 && r.jogador_sala_rodada?.jogador_sala?.jogador_id) {
-            const jId = r.jogador_sala_rodada.jogador_sala.jogador_id;
-            totais[jId] = (totais[jId] || 0) + (r.pontos || 0);
-        } else if (r.jogador_sala_rodada?.jogador_sala?.jogador_id) {
-            // Garante que mesmo jogador com 0 pontos apareça nos totais
-            const jId = r.jogador_sala_rodada.jogador_sala.jogador_id;
-            if (!(jId in totais)) {
-                totais[jId] = 0;
-            }
-        }
-    }
-    return totais;
-}
-
-/* ================================================================
-   == (REESCRITO) SCORING (Passo 5) ==
-================================================================ */
-
+/* =========================
+   SCORING (com dicionário)
+========================= */
 /**
- * (REESCRITA) endRoundAndScore
+ * HARDENING: encerra rodada com lock e pontua com base no dicionário
+ * ATUALIZADO: Lógica de pontuação refeita para N jogadores
  */
 export async function endRoundAndScore({ salaId, roundId, skippedWordsSet = null, disregardedOpponentWordsSet = null }) {
-    // 🔒 Lock (Manter código existente)
-    const lock = await supa
-        .from('rodada')
-        .update({ status: 'scoring' })
-        .eq('rodada_id', roundId)
-        .in('status', ['ready', 'in_progress']) 
-        .select('rodada_id')
-        .maybeSingle();
-    if (lock.error) throw lock.error;
-    if (!lock.data) {
-        console.warn(`[endRoundAndScore] Lock não adquirido ou rodada ${roundId} já em scoring/done.`);
-        // (ALTERADO) Chamar a nova função de totais e a nova getRoundResults
-        return await getRoundResults({ salaId, roundId });
-    }
+  // 🔒 Tenta ganhar o "lock" para evitar pontuação dupla
+  const lock = await supa
+    .from('rodada')
+    .update({ status: 'scoring' })
+    .eq('rodada_id', roundId)
+    .in('status', ['ready', 'in_progress']) // Só pode pontuar se estava pronta ou em progresso
+    .select('rodada_id')
+    .maybeSingle()
+  if (lock.error) throw lock.error
+  if (!lock.data) {
+    // Outro processo (ou o mesmo, em caso de erro anterior) já está pontuando ou já pontuou.
+    console.warn(`[endRoundAndScore] Lock não adquirido ou rodada ${roundId} já em scoring/done.`);
+    // Retorna os totais atuais para consistência, mas sem calcular placar da rodada novamente.
+    return { roundId, roundScore: {}, totais: await computeTotaisSala({ salaId }) }
+  }
 
-    // ==== Fluxo normal de pontuação (Novo) ====
-    console.log(`[Scoring] Iniciando pontuação para rodada ${roundId} da sala ${salaId}`);
-
-    // 1. Pega a Letra e os Temas
-    const core = await getRoundCore(roundId); // { rodada_id, sala_id, letra_id, letra }
-    if (!core) {
+  // ==== Fluxo normal de pontuação ====
+  let jogadores = await getJogadoresDaSala(salaId) // Pega jogadores da tabela jogador_sala
+  // Fallback: Se jogador_sala estiver vazio (ex: jogadores saíram?), pega quem participou
+  if (!jogadores || jogadores.length === 0) {
+    console.warn(`[endRoundAndScore] Nenhum jogador encontrado em jogador_sala para sala ${salaId}. Verificando participacao_rodada.`);
+    const q = await supa
+      .from('participacao_rodada')
+      .select('jogador_id', { distinct: true }) // Pega IDs únicos
+      .eq('rodada_id', roundId)
+    if (q.error) throw q.error
+    jogadores = (q.data || []).map(r => Number(r.jogador_id)).filter(Boolean).sort((a,b)=>a-b);
+    if (jogadores.length === 0) {
+        console.warn(`[endRoundAndScore] Nenhum jogador participou da rodada ${roundId}. Abortando pontuação.`);
+        // Marca como done mesmo assim para não bloquear
         await supa.from('rodada').update({ status: 'done' }).eq('rodada_id', roundId);
-        return { roundId, roundScore: {}, totais: await computeNewTotaisSala({ salaId }) };
+        return { roundId, roundScore: {}, totais: {} }; // Retorna vazio
     }
-    const letraId = core.letra_id;
-    const letraNorm = normalize(core.letra);
-    console.log(`[Scoring] Letra: ${letraNorm} (ID: ${letraId})`);
+  }
 
-    const { data: temasData, error: temasError } = await supa
-        .from('rodada_tema')
-        .select('tema_id, tema:tema_id(tema_nome)')
-        .eq('rodada_id', roundId);
-    if (temasError) throw temasError;
+  const temas = await getTemasDaRodada(roundId) // [{rodada_id, tema_id, tema_nome}]
+  if (!temas || temas.length === 0) {
+      console.warn(`[endRoundAndScore] Rodada ${roundId} não tem temas associados. Abortando pontuação.`);
+      await supa.from('rodada').update({ status: 'done' }).eq('rodada_id', roundId);
+      return { roundId, roundScore: {}, totais: await computeTotaisSala({ salaId }) };
+  }
+  
+  // Garante que existe uma linha em participacao_rodada para cada jogador/tema
+  await ensurePlaceholders({ rodadaId: roundId, jogadores, temas })
 
-    const temas = temasData.map(t => ({ id: t.tema.tema_id, nome: t.tema.tema_nome }));
-    const temaIds = temas.map(t => t.id);
-    console.log(`[Scoring] Temas: ${temas.map(t=>t.nome).join(', ')}`);
+  // Carrega todas as respostas (incluindo as placeholders vazias)
+  const respostas = await loadRespostasRodada({ rodadaId: roundId, jogadores, temas })
 
-    // 2. Carrega o Dicionário
-    const lexicon = await loadLexiconMap({ temaIds, letraId }); // (Função existente)
+  // Pega a letra da rodada (necessário para validação e para carregar o dicionário)
+  const core = await getRoundCore(roundId)
+  if (!core) { // Segurança extra
+      console.error(`[endRoundAndScore] Falha ao carregar core da rodada ${roundId}.`);
+      // Não reverter o status 'scoring' aqui, marcar como done
+      await supa.from('rodada').update({ status: 'done' }).eq('rodada_id', roundId);
+      return { roundId, roundScore: {}, totais: await computeTotaisSala({ salaId }) };
+  }
+  const letraId = core.letra_id
+  const letraChar = core.letra?.toUpperCase() || ''
+  const letraNorm = normalize(letraChar); // Normaliza a letra da rodada uma vez
 
-    // 3. Carrega os dados de participação (respostas, jogadores, temas)
-    const { mapaRespostas, jogadorMap } = await getParticipacaoData(roundId, salaId);
-    const allJogadorIds = Object.values(jogadorMap);
-    console.log(`[Scoring] Jogadores na rodada: ${allJogadorIds.join(', ')}`);
-    
-    // 4. Prepara objetos de resultado
-    const roundScore = {}; // { tema_nome: { jogador_id: pontos } }
-    const updates = []; // Array para salvar no DB: { resposta_id, pontos }
+  // Carrega o dicionário de respostas válidas para esta letra e temas
+  const temaIds = temas.map(t => t.tema_id)
+  const lexicon = await loadLexiconMap({ temaIds, letraId })
 
-    // 5. Itera sobre cada tema e calcula os pontos
-    for (const t of temas) {
-        const temaId = t.id;
-        const temaNome = t.nome;
-        const set = lexicon[temaId] || new Set(); // Dicionário para este tema/letra
+  const roundScore = {} // Objeto para guardar o placar desta rodada { tema_nome: { jogador_id: pontos } }
+  const allJogadorIds = [...jogadores] // Lista de IDs de todos os jogadores na sala/participantes
 
-        const temaRespostas = {}; // { jogador_id: { norm, resposta_id, valida, pontos } }
-        const validos = {}; // { resposta_normalizada: [jogador_id1, jogador_id2] }
+  // Itera sobre cada tema da rodada
+  for (const t of temas) {
+    const temaId = t.tema_id
+    const temaNome = t.tema_nome
+    const set = lexicon[temaId] || new Set() // Dicionário para este tema/letra
 
-        // a. Coleta e valida as respostas
-        for (const jId of allJogadorIds) {
-            const respData = mapaRespostas[temaNome]?.[jId];
-            if (!respData) {
-                console.warn(`[Scoring] Falta 'participacao_rodada_tema' para jId ${jId} e tema ${temaNome}`);
-                continue;
-            }
+    const temaRespostas = {} // { jogador_id: { resposta, norm, valida, pontos } }
+    const validos = {} // { resposta_normalizada: [jogador_id1, jogador_id2] } -> Agrupa quem deu a mesma resposta válida
 
-            const { norm, resposta_id } = respData;
-            // Validação (Assume que 'norm' já está normalizado)
-            const startsWith = letraNorm ? norm.startsWith(letraNorm) : false;
-            const valida = !!norm && startsWith && set.has(norm);
-            
-            // Log de validação
-            // console.log(`[Validar] J:${jId} T:${temaNome} R:'${norm}' SW:${startsWith} SET:${set.has(norm)} V:${valida}`);
+    // 1. Coleta e valida as respostas de TODOS os jogadores para este tema
+    for (const jId of allJogadorIds) {
+      const resposta = respostas[temaNome]?.[jId]?.resposta || '' // Pega a resposta do mapa carregado
+      const norm = normalize(resposta) // Normaliza a resposta
+      const startsWith = letraNorm ? norm.startsWith(letraNorm) : false // Verifica se começa com a letra (normalizada)
+      const valida = !!norm && startsWith && set.has(norm) // É válida se não for vazia, começar certo e existir no dicionário
 
+      // Armazena informações processadas
+      temaRespostas[jId] = { resposta, norm, valida, pontos: 0 }
 
-            temaRespostas[jId] = { norm, resposta_id, valida, pontos: 0 };
-
-            if (valida) {
-                if (!validos[norm]) validos[norm] = [];
-                validos[norm].push(jId);
-            }
-        }
-
-        // b. Calcula os pontos (5, 10, 0)
-        for (const norm in validos) {
-            const jogadoresComEstaResposta = validos[norm];
-            const pontos = (jogadoresComEstaResposta.length === 1) ? 10 : 5;
-            for (const jId of jogadoresComEstaResposta) {
-                 // Verifica se a palavra deste jogador foi desconsiderada
-                const isDisregarded = disregardedOpponentWordsSet && disregardedOpponentWordsSet.has(`${jId}-${temaNome}`);
-                if (!isDisregarded) {
-                    temaRespostas[jId].pontos = pontos;
-                } else {
-                    console.log(`[DISREGARD] Palavra '${norm}' do Jogador ${jId} foi desconsiderada.`);
-                }
-            }
-        }
-        
-        // c. Aplica pontos para palavras puladas (SKIP_WORD)
-        if (skippedWordsSet && skippedWordsSet.size > 0) {
-            for (const jId of allJogadorIds) {
-                if (temaRespostas[jId] && skippedWordsSet.has(`${jId}-${temaNome}`) && temaRespostas[jId].pontos === 0) {
-                    temaRespostas[jId].pontos = 10;
-                    console.log(`[SKIP_WORD] Jogador ${jId} ganhou 10 pontos por pular palavra "${temaNome}"`);
-                }
-            }
-        }
-
-        // d. Prepara o payload de 'roundScore' e 'updates'
-        roundScore[temaNome] = {};
-        for (const jId of allJogadorIds) {
-             if (!temaRespostas[jId]) { // Jogador pode não ter entrada de resposta (ex: entrou atrasado)
-                roundScore[temaNome][jId] = 0;
-                continue; 
-             }
-             
-             const p = temaRespostas[jId].pontos;
-             const rId = temaRespostas[jId].resposta_id;
-             
-             roundScore[temaNome][jId] = p; // Para o frontend
-             updates.push({ resposta_id: rId, pontos: p }); // Para o DB
-        }
+      // Se a resposta for válida, adiciona ao grupo 'validos'
+      if (valida) {
+        if (!validos[norm]) validos[norm] = []
+        validos[norm].push(jId)
+      }
     }
 
-    // 6. Salva os pontos no DB
-    console.log(`[Scoring] Salvando ${updates.length} atualizações de pontos...`);
-    await saveNewPontuacao(updates);
+    // 2. Calcula os pontos com base nas respostas válidas agrupadas
+    for (const norm in validos) {
+      const jogadoresComEstaResposta = validos[norm]
+      if (jogadoresComEstaResposta.length === 1) {
+        // Se SÓ UM jogador deu esta resposta válida -> 10 pontos
+        const jId = jogadoresComEstaResposta[0]
+        // Verifica se a palavra deste jogador foi desconsiderada
+        const isDisregarded = disregardedOpponentWordsSet && disregardedOpponentWordsSet.has(`${jId}-${temaNome}`)
+        if (!isDisregarded) {
+          temaRespostas[jId].pontos = 10
+        }
+      } else {
+        // Se MAIS DE UM jogador deu esta resposta válida -> 5 pontos para cada um
+        for (const jId of jogadoresComEstaResposta) {
+          // Verifica se a palavra deste jogador foi desconsiderada
+          const isDisregarded = disregardedOpponentWordsSet && disregardedOpponentWordsSet.has(`${jId}-${temaNome}`)
+          if (!isDisregarded) {
+            temaRespostas[jId].pontos = 5
+          }
+        }
+      }
+    }
 
-    // 7. Calcula os totais acumulados
-    const totais = await computeNewTotaisSala({ salaId });
-    console.log(`[Scoring] Totais calculados:`, totais);
+    // 2.5. Aplica pontos para palavras puladas (SKIP_WORD powerup)
+    if (skippedWordsSet && skippedWordsSet.size > 0) {
+      for (const jId of allJogadorIds) {
+        const skipKey = `${jId}-${temaNome}`
+        if (skippedWordsSet.has(skipKey) && temaRespostas[jId].pontos === 0) {
+          // Se a palavra foi pulada e o jogador não ganhou pontos pela resposta normal, dá 10 pontos
+          temaRespostas[jId].pontos = 10
+          console.log(`[SKIP_WORD] Jogador ${jId} ganhou 10 pontos por pular palavra "${temaNome}"`)
+        }
+      }
+    }
 
-    // 8. ✅ Marca a rodada como concluída
-    await supa.from('rodada').update({ status: 'done' }).eq('rodada_id', roundId);
+    // 3. Salva a pontuação no banco de dados e constrói o payload 'roundScore' para o frontend
+    roundScore[temaNome] = {}
+    for (const jId of allJogadorIds) {
+      const p = temaRespostas[jId].pontos
+      // Salva a pontuação (0, 5 ou 10) na tabela 'participacao_rodada'
+      await savePontuacao({ rodadaId: roundId, temaNome, jogadorId: jId, pontos: p })
+      // Adiciona ao objeto que será enviado para o frontend
+      roundScore[temaNome][jId] = p
+    }
+  }
 
-    // 9. Retorna o resultado
-    return { roundId, roundScore, totais };
+  // Calcula os totais acumulados para todos os jogadores na sala
+  const totais = await computeTotaisSala({ salaId })
+
+  // ✅ Marca a rodada como concluída no banco de dados
+  await supa.from('rodada').update({ status: 'done' }).eq('rodada_id', roundId)
+
+  // Retorna o resultado da rodada e os totais
+  return { roundId, roundScore, totais }
 }
 
-// (NOVA) getRoundResults (reescrita para novo schema)
+// Função auxiliar para buscar resultados de uma rodada já pontuada
 export async function getRoundResults({ salaId, roundId }) {
   try {
-    console.log(`[getRoundResults] Buscando resultados para rodada ${roundId} (sala ${salaId})`);
-    // 1. Pega os dados de participação
-    const { mapaRespostas } = await getParticipacaoData(roundId, salaId);
-    
-    // 2. Busca os pontos
-    const allRespostaIds = Object.values(mapaRespostas).flatMap(j => Object.values(j).map(r => r.resposta_id));
-    if (allRespostaIds.length === 0) {
-        console.warn(`[getRoundResults] Nenhuma resposta encontrada para rodada ${roundId}`);
-        return { roundId, roundScore: {}, totais: await computeNewTotaisSala({ salaId }) };
+    // Busca os jogadores da sala
+    let jogadores = await getJogadoresDaSala(salaId);
+    if (!jogadores || jogadores.length === 0) {
+      const q = await supa
+        .from('participacao_rodada')
+        .select('jogador_id', { distinct: true })
+        .eq('rodada_id', roundId);
+      if (q.error) throw q.error;
+      jogadores = (q.data || []).map(r => Number(r.jogador_id)).filter(Boolean).sort((a,b)=>a-b);
     }
 
+    // Busca os temas da rodada
+    const temas = await getTemasDaRodada(roundId);
+    if (!temas || temas.length === 0) {
+      return { roundId, roundScore: {}, totais: await computeTotaisSala({ salaId }) };
+    }
+
+    // Busca os resultados pontuados do banco
     const { data: participacoes, error } = await supa
-      .from('participacao_rodada_tema')
-      .select('pontos, resposta_id')
-      .in('resposta_id', allRespostaIds);
+      .from('participacao_rodada')
+      .select('jogador_id, tema_nome, pontos')
+      .eq('rodada_id', roundId)
+      .in('jogador_id', jogadores)
+      .in('tema_nome', temas.map(t => t.tema_nome));
 
     if (error) throw error;
-    
-    // Mapa de { resposta_id -> pontos }
-    const pontosMap = participacoes.reduce((acc, p) => {
-        acc[p.resposta_id] = p.pontos;
-        return acc;
-    }, {});
 
-    // 3. Constrói o roundScore no formato esperado
+    // Constrói o roundScore no formato esperado
     const roundScore = {};
-    for (const temaNome in mapaRespostas) {
-        roundScore[temaNome] = {};
-        for (const jId in mapaRespostas[temaNome]) {
-            const respId = mapaRespostas[temaNome][jId].resposta_id;
-            roundScore[temaNome][jId] = pontosMap[respId] || 0;
-        }
+    for (const tema of temas) {
+      roundScore[tema.tema_nome] = {};
+      for (const jId of jogadores) {
+        const participacao = participacoes?.find(p => p.jogador_id === jId && p.tema_nome === tema.tema_nome);
+        roundScore[tema.tema_nome][jId] = participacao?.pontos || 0;
+      }
     }
 
-    // 4. Calcula os totais
-    const totais = await computeNewTotaisSala({ salaId });
+    // Calcula os totais
+    const totais = await computeTotaisSala({ salaId });
 
     return { roundId, roundScore, totais };
   } catch (err) {
     console.error(`[getRoundResults] Erro ao buscar resultados da rodada ${roundId}:`, err);
-    return { roundId, roundScore: {}, totais: await computeNewTotaisSala({ salaId }) };
+    return { roundId, roundScore: {}, totais: await computeTotaisSala({ salaId }) };
   }
 }
 
 
 /* =========================
-   Sorteio coerente (LETRA EXISTENTE - MANTER)
+   Sorteio coerente (letra com >=4 temas)
 ========================= */
 export async function generateCoherentRounds({ totalRounds = 5 }) {
   // 1) Carrega toda a resposta_base (paginando para evitar limites)
@@ -673,7 +523,7 @@ export async function generateCoherentRounds({ totalRounds = 5 }) {
 }
 
 /* =========================
-   LETRAS sem repetição (fallback antigo - manter)
+   LETRAS sem repetição (fallback antigo - manter caso precise?)
 ========================= */
 export function pickLettersNoRepeat({ total, blacklist = [] }) {
   const A = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').filter(ch => !blacklist.includes(ch))

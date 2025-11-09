@@ -45,9 +45,10 @@ export function useGameSocket(salaId) {
       setFinalizado(false);
       setVencedor(null);
     };
-    const onStarted = ({ duration }) => {
-      console.log("round:started recebido, duração:", duration);
-      setTimeLeft(duration);
+    const onStarted = ({ duration, timeLeft }) => {
+      console.log("round:started recebido, duração:", duration, "tempo restante:", timeLeft);
+      // Se timeLeft foi fornecido (rodada já em andamento), usa ele; senão usa duration (rodada nova)
+      setTimeLeft(timeLeft !== undefined ? timeLeft : duration);
       setIsLocked(false);
     };
     const onTick = (t) => { setTimeLeft(t); };
@@ -130,26 +131,38 @@ export function useGameSocket(salaId) {
 
 
     // --- 2. INÍCIO DA NOVA CORREÇÃO ---
-    // Função para "chamar" a partida
-    const fetchMatch = async () => {
+    // Função para buscar rodada atual sem reiniciar timer
+    const fetchCurrentRound = async () => {
       try {
-        console.log(`[useGameSocket] Listeners registrados. Chamando /matches/start...`);
-        // Esta chamada vai fazer o backend emitir 'round:ready' e 'round:started'
-        // que serão pegos pelos listeners acima.
-        await api.post('/matches/start', { sala_id: Number(salaId), duration: 20 });
+        console.log(`[useGameSocket] Buscando rodada atual para sala ${salaId}...`);
+        const response = await api.get(`/matches/current/${salaId}`);
+        if (response.data.hasActiveRound) {
+          console.log(`[useGameSocket] Rodada atual encontrada, eventos serão emitidos pelo backend`);
+          // Os eventos round:ready e round:started serão emitidos pelo backend
+          // sem reiniciar o timer
+        } else {
+          console.log(`[useGameSocket] Nenhuma rodada ativa. Iniciando nova partida...`);
+          // Se não há rodada ativa, inicia uma nova
+          await api.post('/matches/start', { sala_id: Number(salaId), duration: 20 });
+        }
       } catch (error) {
-        console.error("[useGameSocket] Erro ao chamar /matches/start:", error);
-        alert(`Erro ao carregar a partida: ${error.response?.data?.error || error.message}`);
+        console.error("[useGameSocket] Erro ao buscar rodada atual:", error);
+        // Se der erro, tenta iniciar uma nova partida como fallback
+        try {
+          await api.post('/matches/start', { sala_id: Number(salaId), duration: 20 });
+        } catch (startError) {
+          console.error("[useGameSocket] Erro ao iniciar partida:", startError);
+          alert(`Erro ao carregar a partida: ${startError.response?.data?.error || startError.message}`);
+        }
       }
     };
 
-    // Se o socket já estiver conectado, chama.
+    // Se o socket já estiver conectado, busca rodada atual.
     if (socket.connected) {
-      fetchMatch();
+      fetchCurrentRound();
     } else {
-      // Se não, espera conectar e *então* chama.
-      // (usamos .once para garantir que rode só uma vez)
-      socket.once('connect', fetchMatch);
+      // Se não, espera conectar e *então* busca.
+      socket.once('connect', fetchCurrentRound);
     }
     // --- FIM DA NOVA CORREÇÃO ---
 
@@ -172,7 +185,7 @@ export function useGameSocket(salaId) {
       socket.off('powerup:ack', onPowerUpAck);
       socket.off('powerup:error', onPowerUpError);
       socket.off('app:error', onAppError);
-      socket.off('connect', fetchMatch); // Limpa o listener 'connect' também
+      socket.off('connect', fetchCurrentRound); // Limpa o listener 'connect' também
     };
   }, [salaId]); // 3. A dependência 'onReceivingAnswers' foi removida
 

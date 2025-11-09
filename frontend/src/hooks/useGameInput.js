@@ -1,136 +1,146 @@
-// fronted/src/hooks/useGameInput.js
-import { useState, useEffect } from 'react';
-import { produce } from 'immer';
-// (NOVO) Importar o socket
-import socket from '../lib/socket';
+// src/hooks/useGameInput.js
+import { useState, useRef, useEffect } from 'react';
+import api from '../lib/api'; // <-- Corrija para '../../lib/api'
+import socket from '../lib/socket'; // <-- Corrija para '../../lib/socket'
 
-/**
- * Hook para gerenciar os inputs (respostas) do jogo.
- * @param {object} gameState - O estado vindo do useGameSocket
- * @param {string} salaId - ID da sala
- * @param {number} meuJogadorId - ID do jogador logado
- */
+// 1. Mude os parâmetros
 export function useGameInput(gameState, salaId, meuJogadorId) {
-  const { rodadaId, isLocked, currentRound } = gameState;
-  
-  // Estado das respostas
-  // Formato: { [temaId]: "resposta" }
+  // 2. Desestruture o estado AQUI DENTRO
+  const { rodadaId, isLocked } = gameState;
+
   const [answers, setAnswers] = useState({});
-  // Formato: Set<temaId>
   const [skippedCategories, setSkippedCategories] = useState(new Set());
-  // Formato: Set<temaId>
   const [disregardedCategories, setDisregardedCategories] = useState(new Set());
+  const debounceTimers = useRef(new Map());
 
-  // Limpa as respostas e estados de pulo quando a rodada muda
+  // Limpa respostas quando a rodadaId muda (agora depende do rodadaId vindo do gameState)
   useEffect(() => {
-    if (rodadaId) {
-      console.log(`[useGameInput] Nova rodada ${rodadaId}. Limpando inputs.`);
-      // Inicializa 'answers' com chaves para cada tema
-      const initialAnswers = {};
-      currentRound.temas?.forEach(tema => {
-        initialAnswers[tema.id] = '';
-      });
-      setAnswers(initialAnswers);
-      setSkippedCategories(new Set());
-      setDisregardedCategories(new Set());
-    }
-  }, [rodadaId]); // Depende apenas de rodadaId
-
-  
-  /**
-   * (NOVO - Passo 4) Envia as respostas finais para o backend via socket.
-   * Esta função é chamada pelo GameScreen.jsx quando o 'isLocked' vira true.
-   */
-  const enviarRespostas = (currentRodadaId, localSkippedCategories) => {
-    // 1. Filtra as respostas para não enviar as puladas
-    const respostasParaEnviar = { ...answers };
+    setAnswers({});
+    setSkippedCategories(new Set());
+    setDisregardedCategories(new Set());
     
-    // O 'answers' usa tema.id como chave, e 'localSkippedCategories' é um Set de tema.id
-    localSkippedCategories.forEach(temaId => {
-      if (temaId in respostasParaEnviar) {
-        // Não deleta, apenas envia vazio (ou o backend pode ignorar)
-        // Vamos deletar para enviar menos dados
-        delete respostasParaEnviar[temaId];
+    for (const t of debounceTimers.current.values()) clearTimeout(t);
+    debounceTimers.current.clear();
+
+  }, [rodadaId]);
+
+  // ---- AUTOSAVE (debounced) ----
+  async function autosaveAnswer(temaId, texto) {
+    if (!rodadaId || isLocked) return; // Agora usa o rodadaId e isLocked do estado
+    const key = String(temaId);
+
+    const prev = debounceTimers.current.get(key);
+    if (prev) clearTimeout(prev);
+
+    const t = setTimeout(async () => {
+      try {
+        console.log(`Autosave: T:${temaId} V:'${texto}' R:${rodadaId}`);
+        await api.post('/answers', {
+          rodada_id: Number(rodadaId),
+          tema_id: Number(temaId),
+          texto: String(texto || '')
+        });
+      } catch (e) {
+        console.error('Autosave fail', { rodadaId, temaId }, e?.response?.data || e);
+      } finally {
+        debounceTimers.current.delete(key);
       }
-    });
+    }, 350);
 
-    console.log(`[useGameInput] Enviando ${Object.keys(respostasParaEnviar).length} respostas para rodada ${currentRodadaId}`);
-    
-    // 2. Emite para o novo handler do socket
-    socket.emit('round:submit_answers', {
-        rodadaId: currentRodadaId,
-        answers: respostasParaEnviar // Envia o objeto de respostas { [temaId]: "resposta" }
-    });
+    debounceTimers.current.set(key, t);
+  }
+
+  // Atualiza o estado local 'answers' e agenda o auto-save
+  const updateAnswer = (temaId, texto) => {
+    if (isLocked) return; // Usa o isLocked do estado
+    if (skippedCategories.has(temaId)) return;
+    if (disregardedCategories.has(temaId)) return; // Não permite editar categoria desconsiderada
+    setAnswers(prev => ({ ...prev, [temaId]: texto }));
+    autosaveAnswer(temaId, texto);
   };
 
-  /**
-   * Atualiza o estado de uma resposta para um tema específico.
-   * @param {number} temaId - O ID do tema
-   * @param {string} value - A nova resposta
-   */
-  const updateAnswer = (temaId, value) => {
-    if (isLocked) return; // Não permite atualizar se a rodada estiver travada
-    
-    setAnswers(
-      produce(draft => {
-        draft[temaId] = value;
-      })
-    );
+  // Envia todas as respostas pendentes
+  const enviarRespostas = async (roundIdSnapshot, categoriasIgnoradas = new Set()) => {
+    // Usa o rodadaId do snapshot (do effect) ou o rodadaId atual do estado
+    const rid = Number(roundIdSnapshot || rodadaId);
+    if (!rid) return;
+
+    console.log(`Enviando respostas finais para rodada ${rid} (ignorando ${categoriasIgnoradas.size} categorias)...`);
+    for (const t of debounceTimers.current.values()) clearTimeout(t);
+    debounceTimers.current.clear();
+
+    const payloads = Object.entries(answers)
+      .filter(([temaId]) => !categoriasIgnoradas.has(Number(temaId)))
+      .filter(([, texto]) => typeof texto === 'string')
+      .map(([temaId, texto]) => ({
+        rodada_id: rid,
+        tema_id: Number(temaId),
+        texto: String(texto || '').trim()
+      }));
+
+    if (!payloads.length) {
+        console.log("Nenhuma resposta válida para envio final.");
+        return;
+    }
+
+    console.log("Payloads para envio final:", payloads);
+    const results = await Promise.allSettled(payloads.map(p => api.post('/answers', p)));
+
+    const fails = results.filter(r => r.status === 'rejected');
+    if (fails.length) {
+      console.error('Falhas no envio final:', fails.map(f => f.reason?.response?.data || f.reason?.message || f.reason));
+    } else {
+        console.log("Envio final concluído com sucesso.");
+    }
   };
 
-  /**
-   * Dispara o evento de STOP para o servidor.
-   */
-  const onStop = () => {
-    if (isLocked) return; // Já foi parado
+  // Função chamada ao clicar no botão STOP
+  const onStop = async () => {
+    const rid = Number(rodadaId);
+    if (!rid || isLocked) return; // Usa o isLocked do estado
+    console.log(`Botão STOP pressionado por ${meuJogadorId} para rodada ${rid}`);
     
-    console.log(`[useGameInput] Pressionou STOP para rodada ${rodadaId}`);
+    // O 'isLocked' será setado pelo hook de socket
+    
+    try {
+        await enviarRespostas(rid, skippedCategories);
+    } catch (e) { console.error("Erro no envio final ao clicar STOP:", e) }
+
     socket.emit('round:stop', {
-      salaId: salaId,
-      roundId: rodadaId,
-      by: meuJogadorId,
+      salaId: Number(salaId),
+      roundId: rid,
+      by: meuJogadorId
     });
   };
 
-  /**
-   * Marca uma categoria como "pulada" (SKIP_OWN_CATEGORY).
-   * @param {number} temaId - O ID do tema a pular
-   */
+  // --- Função para PULAR uma categoria ---
   const handleSkipCategory = (temaId) => {
-    console.log(`[useGameInput] Pulando categoria ${temaId}`);
-    setSkippedCategories(
-      produce(draft => {
-        draft.add(temaId);
-      })
-    );
-    // Limpa a resposta desse campo
-    updateAnswer(temaId, '');
+      console.log(`Jogador ${meuJogadorId} pulou a categoria ${temaId}`);
+      updateAnswer(temaId, ''); // Limpa a resposta
+      setSkippedCategories(prev => new Set(prev).add(temaId));
   };
 
-  /**
-   * Marca uma categoria como "desconsiderada" (vinda do oponente).
-   * @param {number} temaId - O ID do tema
-   */
+  // Handler para quando uma categoria é desconsiderada pelo oponente
   const handleCategoryDisregarded = (temaId) => {
-    console.log(`[useGameInput] Categoria ${temaId} foi desconsiderada por oponente.`);
-    setDisregardedCategories(
-      produce(draft => {
-        draft.add(temaId);
-      })
-    );
-    // Limpa a resposta desse campo
-    updateAnswer(temaId, '');
+    console.log(`Categoria ${temaId} foi desconsiderada pelo oponente`);
+    setDisregardedCategories(prev => new Set(prev).add(temaId));
+    // Limpa a resposta da categoria desconsiderada
+    setAnswers(prev => {
+      const newAnswers = { ...prev };
+      delete newAnswers[temaId];
+      return newAnswers;
+    });
   };
 
   return {
     answers,
     updateAnswer,
     skippedCategories,
-    setSkippedCategories, // Usado pelo GameScreen
+    setSkippedCategories,
     disregardedCategories,
-    handleCategoryDisregarded, // Usado pelo GameScreen
+    handleCategoryDisregarded,
     onStop,
     handleSkipCategory,
-    enviarRespostas // (NOVO) Exporta a função para o GameScreen
+    enviarRespostas 
   };
 }

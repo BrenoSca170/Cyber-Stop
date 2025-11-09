@@ -123,8 +123,11 @@ export default function MatchEndScreen({ totais, vencedor, meuJogadorId, onReFet
       <button
           onClick={() => navigate('/')}
           className="mt-6 bg-secondary hover:bg-secondary/80 text-black px-6 py-2 rounded text-lg font-semibold 
-                     transition-all hover:scale-105 [transform-style:preserve-3d] hover:[transform:translateZ(15px)] active:[transform:translateZ(5px)]
-                     flex items-center justify-center gap-2 mx-auto cursor-target"
+                     transition-all hover:scale-105 [transform-style:preserve-3d] 
+                     [transform:translateZ(0px)]
+                     hover:[transform:translateZ(15px)] active:[transform:translateZ(5px)]
+                     flex items-center justify-center gap-2 mx-auto cursor-target
+                     relative z-10"
           data-augmented-ui="tl-scoop tr-scoop br-scoop bl-scoop"
       >
           <Home size={20} />

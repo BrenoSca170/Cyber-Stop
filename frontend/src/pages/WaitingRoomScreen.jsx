@@ -1,4 +1,3 @@
-// frontend/src/pages/WaitingRoomScreen.jsx
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../lib/api';
@@ -17,7 +16,11 @@ function WaitingRoomScreen() {
     const [copySuccess, setCopySuccess] = useState(''); 
     const [leaving, setLeaving] = useState(false); 
 
-    // --- Funções de Lógica ---
+    // ... (Todas as funções: copyToClipboard, handleStartGame, handleLeaveRoom) ...
+    // ... (Toda a lógica dentro do useEffect) ...
+    // NENHUMA LÓGICA PRECISA MUDAR.
+
+    // --- Funções de Lógica (sem alteração) ---
     const copyToClipboard = async () => { 
         try { 
             await navigator.clipboard.writeText(salaId); 
@@ -29,28 +32,23 @@ function WaitingRoomScreen() {
             setTimeout(() => setCopySuccess(''), 2000); 
         }
     };
-
     const handleStartGame = async () => { 
         setLoading(true); 
         setError(''); 
         try { 
-            // A rota /matches/start é responsável por mudar o status da sala para 'playing'
             await api.post(`/matches/start`, { sala_id: Number(salaId) });
-            // Não precisa navegar aqui, o evento 'round:ready' ou 'round:started' fará isso
         } catch (err) { 
             console.error('Erro ao iniciar partida:', err); 
             setError(err.response?.data?.error || err.message || 'Falha ao iniciar a partida.'); 
             setLoading(false); 
         }
     };
-
     const handleLeaveRoom = async () => { 
       setLeaving(true);
       setError('');
       try {
-          // Esta rota agora muda o status para 'closed' se o host sair
           await api.post(`/rooms/${salaId}/leave`); 
-          navigate('/'); // Navega de volta ao lobby após sair
+          navigate('/'); 
       } catch (error) {
           console.error("Erro ao sair da sala:", error);
           setError(error.response?.data?.error || error.message || 'Falha ao sair da sala.');
@@ -58,8 +56,6 @@ function WaitingRoomScreen() {
           setLeaving(false); 
       }
     };
-
-    // --- Efeito Principal para Sockets e Fetch ---
     useEffect(() => { 
         let isMounted = true; 
         let intervalId = null; 
@@ -74,24 +70,20 @@ function WaitingRoomScreen() {
                 if (isMounted) { 
                     setSala(salaData); 
                     setError(''); 
-
-                    // Status: Jogo começou
-                    if (salaData.status === 'playing') { // USA 'playing'
-                         console.log(`[Polling] Detectou status 'playing'. Navegando...`);
+                    if (salaData.status === 'in_progress') {
+                         console.log(`[Polling] Detectou status 'in_progress'. Navegando imediatamente...`);
                          if (intervalId) clearInterval(intervalId); 
-                         // Limpa os listeners antes de navegar
                          socket.off('room:players_updated', handlePlayersUpdate);
-                         socket.off('room:closed', handleRoomClosed); // USA 'room:closed'
+                         socket.off('room:abandoned', handleRoomAbandoned);
                          socket.off('round:ready', handleGameStarted);
                          socket.off('round:started', handleGameStarted);
-                         navigate(`/game/${salaId}`); 
+                         // Navega imediatamente quando detecta in_progress
+                         navigate(`/game/${salaId}`, { replace: true }); 
                          return; 
                     }
-                    
-                    // Status: Sala foi fechada
-                     if (salaData.status === 'closed') { // USA 'closed'
-                         console.log(`Sala ${salaId} com status 'closed', voltando ao lobby.`);
-                         alert(`A sala foi fechada.`);
+                     if (salaData.status === 'terminada' || salaData.status === 'abandonada') {
+                         console.log(`Sala ${salaId} com status ${salaData.status}, voltando ao lobby.`);
+                         alert(`A sala foi ${salaData.status}.`);
                          navigate('/');
                      }
                 }
@@ -103,7 +95,7 @@ function WaitingRoomScreen() {
                             console.warn("Falha na busca inicial da sala (404/410).");
                             setError('Conectando à sala... (tentativa 1 falhou, tentando de novo...)');
                         } else {
-                            alert(err.response?.data?.error || 'Sala não encontrada ou fechada.'); 
+                            alert(err.response?.data?.error || 'Sala não encontrada ou abandonada.'); 
                             navigate('/'); 
                         }
                     }
@@ -125,8 +117,6 @@ function WaitingRoomScreen() {
                }
            }
         };
-        
-       // Evento: Jogador entrou ou saiu
        const handlePlayersUpdate = ({ jogadores }) => {
            console.log('Recebido room:players_updated', jogadores);
            if (isMounted) {
@@ -136,56 +126,56 @@ function WaitingRoomScreen() {
                });
            }
        };
-
-       // Evento: Host fechou a sala
-       const handleRoomClosed = ({ message }) => { // MUDOU DE 'handleRoomAbandoned'
-           console.log('Recebido room:closed', message); // MUDOU DE 'room:abandoned'
+       const handleRoomAbandoned = ({ message }) => {
+           console.log('Recebido room:abandoned', message);
            if (isMounted) {
-               alert(message || 'O host fechou a sala. Voltando ao lobby.');
+               alert(message || 'O criador abandonou a sala. Voltando ao lobby.');
                navigate('/');
            }
        };
-
-       // Evento: Jogo iniciado
        const handleGameStarted = (data) => {
-            console.log("Recebido 'round:ready' ou 'round:started'. Navegando...", data);
+            console.log("Recebido 'round:ready' ou 'round:started'. Navegando imediatamente...", data);
             if (isMounted) {
+                if (intervalId) clearInterval(intervalId);
                 socket.off('room:players_updated', handlePlayersUpdate);
-                socket.off('room:closed', handleRoomClosed); // MUDOU DE 'room:abandoned'
+                socket.off('room:abandoned', handleRoomAbandoned);
                 socket.off('round:ready', handleGameStarted); 
                 socket.off('round:started', handleGameStarted); 
-                navigate(`/game/${salaId}`); 
+                navigate(`/game/${salaId}`, { replace: true }); 
             }
        };
-       
-       // Liga os listeners
+       // Registra listeners ANTES de entrar na sala
        socket.on('room:players_updated', handlePlayersUpdate);
-       socket.on('room:closed', handleRoomClosed); // MUDOU DE 'room:abandoned'
+       socket.on('room:abandoned', handleRoomAbandoned);
        socket.on('round:ready', handleGameStarted); 
-       socket.on('round:started', handleGameStarted); 
+       socket.on('round:started', handleGameStarted);
        
-       // Entra na sala via socket
+       // Garante que o socket está na sala
        socket.emit('join-room', String(salaId)); 
        console.log(`Socket join-room emitido para sala ${salaId}`);
        
-       // Busca o estado inicial e inicia o polling
-       fetchSalaState(true); 
-       intervalId = setInterval(fetchSalaState, 5000); 
-       
-       // Função de limpeza
-       return () => { 
+       // Re-emite join-room após um pequeno delay para garantir conexão
+       setTimeout(() => {
+         socket.emit('join-room', String(salaId));
+         console.log(`Socket join-room re-emitido para sala ${salaId} (garantia)`);
+       }, 500);
+        fetchSalaState(true); 
+        // Polling mais frequente (1s) para detectar início mais rápido
+        intervalId = setInterval(() => {
+          fetchSalaState(false);
+        }, 1000); // Polling a cada 1 segundo 
+        return () => { 
             console.log("Limpando WaitingRoomScreen"); 
             isMounted = false; 
             if (intervalId) clearInterval(intervalId); 
-           // Desliga os listeners
            socket.off('room:players_updated', handlePlayersUpdate);
-           socket.off('room:closed', handleRoomClosed); // MUDOU DE 'room:abandoned'
+           socket.off('room:abandoned', handleRoomAbandoned);
            socket.off('round:ready', handleGameStarted); 
            socket.off('round:started', handleGameStarted); 
         };
     }, [salaId, navigate]); 
 
-    // --- Renderização (Loading) ---
+    // --- Renderização com Alterações ---
     if (loading || !sala) { 
         return ( 
              <div className="text-white text-center p-10 flex flex-col items-center justify-center gap-4 font-cyber">
@@ -196,17 +186,15 @@ function WaitingRoomScreen() {
         );
     }
 
-    // --- Renderização (Tela Principal) ---
     return ( 
         <div className="relative flex flex-col items-center justify-center min-h-[calc(100vh-120px)] text-white p-4 font-cyber [perspective:1000px]">
             <PixelBlast className="relative inset-0 w-full h-full z-0" />
             <div className="absolute z-10 w-full max-w-2xl mx-auto">
-                
                 {/* Botão Sair */}
                 <button
                     onClick={handleLeaveRoom} 
                     disabled={leaving} 
-                    className="absolute top-4 left-4 md:top-6 md:left-6 text-text-muted hover:text-primary transition-colors flex items-center gap-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-target" 
+                    className="absolute top-4 left-4 md:top-6 md:left-6 text-text-muted hover:text-primary transition-colors flex items-center gap-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed" 
                     title="Sair da sala" 
                 >
                     {leaving ? <Loader2 size={16} className="animate-spin" /> : <ArrowLeft size={16} />} 
@@ -223,32 +211,32 @@ function WaitingRoomScreen() {
                         <span className="text-2xl font-mono text-warning bg-black/50 px-3 py-1 rounded border border-dashed border-warning/50"> 
                             {salaId} 
                         </span>
-                        <button onClick={copyToClipboard} title="Copiar ID" className="text-text-muted hover:text-warning transition-colors p-1 cursor-target"> 
+                        <button onClick={copyToClipboard} title="Copiar ID" className="text-text-muted hover:text-warning transition-colors p-1"> 
                             <ClipboardCopy size={20}/> 
                         </button>
                     </div>
                     {copySuccess && <p className="text-xs text-accent h-4">{copySuccess}</p>} 
 
                     <p className="text-text-muted mt-2 text-sm">Host: {sala.jogador?.nome_de_usuario || 'Desconhecido'}</p> 
-                     
-                     {/* Texto de Status Atualizado */}
                      <p className={`mt-1 text-sm font-semibold ${
-                          sala.status === 'open' ? 'text-warning'
-                        : sala.status === 'playing' ? 'text-accent'
-                        : sala.status === 'closed' ? 'text-secondary'
+                          sala.status === 'waiting' ? 'text-warning'
+                        : sala.status === 'in_progress' ? 'text-accent'
+                        : sala.status === 'terminada' ? 'text-secondary'
+                        : sala.status === 'abandonada' ? 'text-primary'
                         : 'text-text-muted' 
                      }`}> 
                         Status: {
-                            sala.status === 'open' ? 'Aguardando Conexões...'
-                          : sala.status === 'playing' ? 'Em Jogo'
-                          : sala.status === 'closed' ? 'Partida Encerrada'
+                            sala.status === 'waiting' ? 'Aguardando Conexões...'
+                          : sala.status === 'in_progress' ? 'Em Jogo'
+                          : sala.status === 'terminada' ? 'Partida Terminada'
+                          : sala.status === 'abandonada' ? 'Nó Abandonado'
                           : sala.status 
                         } 
                      </p>
                      {error && <p className="text-red-400 mt-2 text-sm">{error}</p>} 
                 </div>
 
-                {/* Lista de Jogadores */}
+                {/* Lista de Jogadores (com augmented-ui) */}
                 <div 
                   className="bg-bg-secondary p-4 md:p-6 mb-8 [transform-style:preserve-3d]"
                   data-augmented-ui="tl-clip tr-clip br-clip bl-clip border"
@@ -268,8 +256,8 @@ function WaitingRoomScreen() {
                     </ul>
                 </div>
 
-                {/* Botão de Iniciar Partida ou Mensagem de Espera (Verifica 'open') */}
-                {sala.status === 'open' && ( 
+                {/* Botão de Iniciar Partida ou Mensagem de Espera */}
+                {sala.status === 'waiting' && ( 
                     <div className="mt-8 md:mt-6 text-center [transform-style:preserve-3d]">
                         {sala.is_creator && ( 
                             <button
@@ -277,8 +265,11 @@ function WaitingRoomScreen() {
                                 disabled={loading || sala.jogadores?.length < 2} 
                                 className="px-8 py-3 md:px-10 md:py-4 bg-accent text-black rounded-lg font-bold text-lg md:text-xl 
                                            hover:bg-accent/80 disabled:bg-gray-500 disabled:cursor-not-allowed 
-                                           transition-all hover:scale-105 hover:[transform:translateZ(15px)] active:[transform:translateZ(5px)]
-                                           flex items-center justify-center gap-2 mx-auto shadow-lg shadow-accent/20 cursor-target" 
+                                           transition-all 
+                                           [transform:translateZ(0px)]
+                                           hover:scale-105 hover:[transform:translateZ(15px)] active:[transform:translateZ(5px)]
+                                           flex items-center justify-center gap-2 mx-auto shadow-lg shadow-accent/20
+                                           relative z-10" 
                                 title={sala.jogadores?.length < 2 ? "Precisa de pelo menos 2 conexões para iniciar" : "Iniciar a partida"} 
                                 data-augmented-ui="tl-scoop tr-scoop br-scoop bl-scoop"
                             >
@@ -294,21 +285,17 @@ function WaitingRoomScreen() {
                         {sala.is_creator && sala.jogadores?.length < 2 && ( 
                                <p className="text-sm text-warning/80 mt-2">Aguardando mais {2 - (sala.jogadores?.length || 0)} jogador(es) para iniciar (máximo 2).</p> 
                         )}
-                        {sala.jogadores?.length === 2 && sala.status === 'open' && (
+                        {sala.jogadores?.length === 2 && sala.status === 'waiting' && (
                             <p className="text-sm text-accent/80 mt-2">Sala cheia! Pronto para iniciar.</p>
                         )}
                     </div>
                 )}
-                
-                 {/* Mensagem de Partida em Andamento (Verifica 'playing') */}
-                 {sala.status === 'playing' && !loading && ( 
-                      <p className="text-base md:text-lg text-secondary text-center">Partida em andamento...</p> 
+                 {sala.status !== 'waiting' && !loading && sala.status !== 'abandonada' && sala.status !== 'terminada' &&( 
+                      <p className="text-base md:text-lg text-secondary text-center">Partida em andamento ou finalizada...</p> 
                  )}
-                 
-                 {/* Mensagem de Sala Fechada (Verifica 'closed') */}
-                  {sala.status === 'closed' && !loading && (
-                        <p className={`text-base md:text-lg text-center font-semibold text-primary`}>
-                           Este Nó está fechado.
+                  {(sala.status === 'abandonada' || sala.status === 'terminada') && !loading && (
+                        <p className={`text-base md:text-lg text-center font-semibold ${sala.status === 'abandonada' ? 'text-primary' : 'text-secondary'}`}>
+                           Este Nó foi {sala.status}.
                         </p>
                   )}
             </div>

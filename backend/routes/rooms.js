@@ -6,240 +6,197 @@ import { getIO } from '../src/sockets.js';
 
 const router = Router();
 
-// --- FUNÇÃO AUXILIAR PARA LIMPEZA E VERIFICAÇÃO DE HOST ---
-async function checkHostAndClean(jogador_id) {
-  // 1. Limpa salas "fechadas" da tabela 'jogador_sala' para este jogador
-  const { data: playerEntries, error: getEntriesError } = await supa
-    .from('jogador_sala')
-    .select('sala_id, sala:sala_id ( status )')
-    .eq('jogador_id', jogador_id);
-  
-  if (getEntriesError) throw getEntriesError;
-
-  const entriesToDelete = (playerEntries || [])
-    .filter(js => js.sala && js.sala.status === 'closed') // Usa 'closed'
-    .map(js => js.sala_id);
-
-  if (entriesToDelete.length > 0) {
-    console.log(`---> [Host Check] Limpando ${entriesToDelete.length} sala(s) 'closed' para jogador ${jogador_id}`);
-    await supa
-      .from('jogador_sala')
-      .delete()
-      .eq('jogador_id', jogador_id)
-      .in('sala_id', entriesToDelete);
-  }
-
-  // 2. NOVA REGRA: Verifica se o jogador é HOST de alguma sala 'open' ou 'playing'
-  const { data: hostSalas, error: hostCheckError } = await supa
-    .from('sala')
-    .select('sala_id, status')
-    .eq('jogador_criador_id', jogador_id) // Verifica salas onde ele é o CRIADOR
-    .in('status', ['open', 'playing']); // Verifica os novos status ativos
-  
-  if (hostCheckError) throw hostCheckError;
-
-  if (hostSalas && hostSalas.length > 0) {
-    console.warn(`---> [Host Check] Bloqueado: Jogador ${jogador_id} ainda é host de uma sala ativa (Sala ${hostSalas[0].sala_id}, Status: ${hostSalas[0].status}).`);
-    return { 
-      locked: true, 
-      error: `Você já é o host de uma sala que está '${hostSalas[0].status}'. Você deve fechá-la antes de criar ou entrar em outra.` 
-    };
-  }
-
-  // 3. REGRA ANTIGA (adaptada): Verifica se ele é JOGADOR em outra sala
-  const otherActiveSalas = (playerEntries || []).filter(js => 
-    js.sala && 
-    (js.sala.status === 'open' || js.sala.status === 'playing') &&
-    !entriesToDelete.includes(js.sala_id) // Ignora as que acabaram de ser limpas
-  );
-
-  if (otherActiveSalas.length > 0) {
-     console.warn(`---> [Host Check] Bloqueado: Jogador ${jogador_id} já está em outra sala ativa (Sala ${otherActiveSalas[0].sala_id}).`);
-      return { 
-        locked: true, 
-        error: 'Você já está em outra sala. Saia da sala anterior para criar ou entrar em uma nova.' 
-      };
-  }
-
-  return { locked: false, error: null };
-}
-// --- FIM DA FUNÇÃO AUXILIAR ---
-
-
 // --- ROTA EXISTENTE: Criar sala ---
 router.post('/', requireAuth, async (req, res) => {
   try {
     const jogador_id = req.user.jogador_id;
     const { nome_sala = 'Sala' } = req.body;
 
-    // --- NOVA VERIFICAÇÃO DE HOST/JOGADOR ---
-    const { locked, error: lockError } = await checkHostAndClean(jogador_id);
-    if (locked) {
-      return res.status(409).json({ error: lockError });
-    }
-    // --- FIM DA VERIFICAÇÃO ---
-
     const { data: sala, error } = await supa.from('sala')
-      .insert({ 
-        jogador_criador_id: jogador_id, 
-        nome_sala, 
-        status: 'open' // USA 'open'
-      })
+      .insert({ jogador_criador_id: jogador_id, nome_sala, status: 'waiting' })
       .select('*').single();
     if (error) throw error;
 
     await supa.from('jogador_sala').insert({ jogador_id, sala_id: sala.sala_id });
 
-    console.log(`---> [POST /rooms] Sala ${sala.sala_id} criada com sucesso (status: open).`);
-    res.json({ sala_id: sala.sala_id, host_user: jogador_id });
+    // LOG DE CONFIRMAÇÃO ADICIONADO
+    console.log(`---> [POST /rooms] Sala ${sala.sala_id} criada com sucesso.`);
 
+    res.json({ sala_id: sala.sala_id, host_user: jogador_id });
   } catch (e) {
     console.error('[POST /rooms] Error:', e);
     res.status(500).json({ error: e.message });
   }
 });
 
-// --- ROTA EXISTENTE: Entrar sala ---
+// --- ROTA EXISTENTE: Entrar sala (COM LOGS ADICIONADOS) ---
 router.post('/join', requireAuth, async (req, res) => {
-  const sala_id = Number(req.body.sala_id);
+  // --- CORREÇÃO DE TIPO DE DADO ---
+  const sala_id = Number(req.body.sala_id); // Converte para Number
   const jogador_id = req.user.jogador_id;
   
   console.log(`---> [POST /rooms/join] REQUISIÇÃO RECEBIDA por jogador ${jogador_id} para sala ${sala_id}`);
 
   try {
     if (!sala_id) {
+        console.log(`---> [POST /rooms/join] Erro: sala_id não fornecido.`);
         return res.status(400).json({ error: 'sala_id required' });
     }
 
-    // --- VERIFICAÇÃO MULTI-SALA (JOGADOR) ---
-    const { data: existingSalas, error: checkError } = await supa
-      .from('jogador_sala')
-      .select('sala_id, sala:sala_id ( status )')
-      .eq('jogador_id', jogador_id);
-    
-    if (checkError) throw checkError;
-
-    const otherActiveSalas = (existingSalas || []).filter(js => 
-      js.sala_id !== sala_id && 
-      js.sala && (js.sala.status === 'open' || js.sala.status === 'playing')
-    );
-    
-    if (otherActiveSalas.length > 0) {
-      console.warn(`---> [POST /rooms/join] Bloqueado: Jogador ${jogador_id} já está em outra sala ativa (sala ${otherActiveSalas[0].sala_id}).`);
-      return res.status(409).json({ error: 'Você já está em outra sala. Saia da sala anterior para entrar nesta.' });
-    }
-    // --- FIM DA VERIFICAÇÃO ---
-
+    // ... (resto da rota /join, que já deve estar correta)
+    console.log(`---> [POST /rooms/join] Verificando status da sala ${sala_id}...`);
     const { data: salaData, error: salaError } = await supa
         .from('sala')
         .select('status, jogador_criador_id')
-        .eq('sala_id', sala_id)
+        .eq('sala_id', sala_id) // .eq() funciona bem com Number
         .single();
     
-    if (salaError) throw salaError;
+    // ... (resto da lógica /join)
+    if (salaError) {
+        console.error(`---> [POST /rooms/join] Erro ao buscar sala ${sala_id}:`, salaError);
+        throw salaError;
+    }
     if (!salaData) {
+        console.log(`---> [POST /rooms/join] Erro: Sala ${sala_id} não encontrada.`);
         return res.status(404).json({ error: 'Sala não encontrada' });
     }
-
-    if (salaData.status !== 'open') {
-        console.log(`---> [POST /rooms/join] Erro: Sala ${sala_id} não está 'open' (status: ${salaData.status}).`);
+    console.log(`---> [POST /rooms/join] Status da sala ${sala_id}: '${salaData.status}'. Criador: ${salaData.jogador_criador_id}`);
+    if (salaData.status !== 'waiting') {
+        console.log(`---> [POST /rooms/join] Erro: Sala ${sala_id} não está 'waiting' (status: ${salaData.status}).`);
         return res.status(400).json({ error: 'Sala não está aguardando jogadores (status: ' + salaData.status + ')' });
     }
+    if (salaData.jogador_criador_id === jogador_id) {
+        console.log(`---> [POST /rooms/join] Erro: Criador ${jogador_id} tentou usar /join.`);
+        return res.status(400).json({ error: 'Criador não pode usar /join para re-entrar.' });
+    }
     
+    // Verifica se a sala já tem 2 jogadores (máximo permitido)
+    console.log(`---> [POST /rooms/join] Verificando quantidade de jogadores na sala ${sala_id}...`);
     const { data: jogadoresExistentes, error: countError } = await supa
         .from('jogador_sala')
         .select('jogador_id', { count: 'exact' })
         .eq('sala_id', sala_id);
     
-    if (countError) throw countError;
+    if (countError) {
+        console.error(`---> [POST /rooms/join] Erro ao contar jogadores na sala ${sala_id}:`, countError);
+        throw countError;
+    }
     
     const quantidadeJogadores = jogadoresExistentes?.length || 0;
     const jogadorJaEstaNaSala = jogadoresExistentes?.some(js => js.jogador_id === jogador_id) || false;
     
+    console.log(`---> [POST /rooms/join] Sala ${sala_id} tem ${quantidadeJogadores} jogador(es). Jogador ${jogador_id} já está na sala: ${jogadorJaEstaNaSala}`);
+    
+    // Se o jogador já está na sala, permite re-entrar
     if (jogadorJaEstaNaSala) {
         console.log(`---> [POST /rooms/join] Jogador ${jogador_id} já está na sala ${sala_id}. Permitindo re-entrada.`);
     } else {
+        // Se a sala já tem 2 jogadores e o jogador não está na sala, bloqueia
         if (quantidadeJogadores >= 2) {
+            console.log(`---> [POST /rooms/join] Erro: Sala ${sala_id} já está cheia (${quantidadeJogadores}/2 jogadores).`);
             return res.status(400).json({ error: 'A sala está cheia. Máximo de 2 jogadores permitidos.' });
         }
     }
     
-    await supa
+    console.log(`---> [POST /rooms/join] Tentando UPSERT jogador ${jogador_id} na sala ${sala_id}...`);
+    const { error: upsertError } = await supa
         .from('jogador_sala')
         .upsert({ jogador_id, sala_id }, { onConflict: 'jogador_id, sala_id' });
-
+    if (upsertError) {
+        console.error(`---> [POST /rooms/join] ERRO NO UPSERT para jogador ${jogador_id} na sala ${sala_id}:`, upsertError);
+        throw upsertError;
+    } else {
+        console.log(`---> [POST /rooms/join] UPSERT de jogador ${jogador_id} na sala ${sala_id} bem-sucedido.`);
+    }
     const io = getIO();
     if (io) {
+       console.log(`---> [POST /rooms/join] Buscando jogadores atualizados para emitir evento...`);
        const { data: jogadoresAtualizadosData, error: jogadoresError } = await supa
            .from('jogador_sala')
            .select('jogador:jogador_id ( jogador_id, nome_de_usuario )')
            .eq('sala_id', sala_id);
        if (!jogadoresError) {
            const jogadoresNomes = (jogadoresAtualizadosData || []).map(js => js.jogador?.nome_de_usuario || `Jogador ${js.jogador?.jogador_id}`);
+           console.log(`---> [POST /rooms/join] Emitindo room:players_updated para sala ${sala_id} com jogadores:`, jogadoresNomes);
            io.to(String(sala_id)).emit('room:players_updated', { jogadores: jogadoresNomes });
+       } else {
+            console.error(`---> [POST /rooms/join] Erro ao buscar jogadores atualizados para emitir evento:`, jogadoresError);
        }
+    } else {
+        console.warn(`---> [POST /rooms/join] Instância do Socket.IO não encontrada. Não foi possível emitir evento.`);
     }
+    console.log(`---> [POST /rooms/join] Resposta enviada com sucesso para jogador ${jogador_id}.`);
     res.json({ sala_id, guest_user: jogador_id });
 
   } catch (e) {
     console.error(`---> [POST /rooms/join] ERRO GERAL NO CATCH para sala ${sala_id} por jogador ${jogador_id}:`, e);
     if (e.code === '23505' || (e.message && e.message.includes('jogador_sala_pkey'))) {
-         return res.json({ sala_id: req.body.sala_id, guest_user: req.user.jogador_id });
+        console.warn(`---> [POST /rooms/join] Capturado erro de chave única (23505). Verificando se jogador ${jogador_id} realmente está na sala ${sala_id}...`);
+         const { data: checkData, error: checkError } = await supa
+            .from('jogador_sala')
+            .select('jogador_id')
+            .eq('jogador_id', req.user.jogador_id)
+            .eq('sala_id', req.body.sala_id)
+            .maybeSingle();
+         if (checkData) {
+              console.log(`---> [POST /rooms/join] Verificação confirmou que jogador ${jogador_id} já está na sala. Retornando OK.`);
+              return res.json({ sala_id: req.body.sala_id, guest_user: req.user.jogador_id });
+         } else {
+              console.error(`---> [POST /rooms/join] Erro de chave única, mas jogador ${jogador_id} não encontrado na verificação!? Erro check:`, checkError);
+              return res.status(409).json({ error: 'Jogador já está nesta sala (ou erro ao verificar).' });
+         }
     } else if (e.code === 'PGRST116') {
+        console.log(`---> [POST /rooms/join] Erro no catch: Sala ${sala_id} não encontrada (PGRST116).`);
         return res.status(404).json({ error: 'Sala não encontrada.' });
     }
     res.status(500).json({ error: e.message });
   }
 });
 
-// --- ROTA: Sair da sala (COM LÓGICA DE HOST) ---
+// --- NOVA ROTA: Sair da sala ---
 router.post('/:salaId/leave', requireAuth, async (req, res) => {
    try {
-       const salaId = Number(req.params.salaId);
+       // --- CORREÇÃO DE TIPO DE DADO ---
+       const salaId = Number(req.params.salaId); // Converte para Number
        const jogador_id = req.user.jogador_id;
 
        console.log(`---> [LEAVE /rooms/${salaId}/leave] REQUISIÇÃO RECEBIDA por jogador ${jogador_id}`);
 
+       // ... (resto da lógica /leave)
        const { data: salaData, error: salaError } = await supa
            .from('sala')
            .select('status, jogador_criador_id')
            .eq('sala_id', salaId)
            .maybeSingle();
        if (salaError) throw salaError;
-       
-       let salaFoiFechada = false; 
-
-       if (salaData && salaData.jogador_criador_id === jogador_id && salaData.status === 'open') {
-           console.log(`---> [LEAVE /rooms/${salaId}/leave] Host (jogador ${jogador_id}) está saindo. ATUALIZANDO sala para 'closed'.`);
-           
+       console.log(`---> [LEAVE /rooms/${salaId}/leave] Dados da sala encontrados:`, salaData);
+       let salaAbandonada = false;
+       if (salaData && salaData.jogador_criador_id === jogador_id && salaData.status === 'waiting') {
+           console.log(`---> [LEAVE /rooms/${salaId}/leave] CONDIÇÃO DE ABANDONO ATENDIDA! Atualizando status...`);
            const { error: updateError } = await supa
                .from('sala')
-               .update({ status: 'closed' }) 
+               .update({ status: 'abandonada' })
                .eq('sala_id', salaId);
-               
            if (updateError) {
-               console.error(`---> [LEAVE /rooms/${salaId}/leave] Erro ao atualizar status para 'closed':`, updateError);
+               console.error(`---> [LEAVE /rooms/${salaId}/leave] Erro ao atualizar status para abandonada:`, updateError);
            } else {
-               salaFoiFechada = true; 
+               salaAbandonada = true;
            }
        } else {
-           console.log(`---> [LEAVE /rooms/${salaId}/leave] Saindo como jogador normal. Status da sala não alterado.`);
+           console.log(`---> [LEAVE /rooms/${salaId}/leave] Condição de abandono NÃO atendida (Criador=${salaData?.jogador_criador_id}, Status=${salaData?.status})`);
        }
-
        const { error: deleteError } = await supa
            .from('jogador_sala')
            .delete()
            .eq('sala_id', salaId)
            .eq('jogador_id', jogador_id);
        console.log(`---> [LEAVE /rooms/${salaId}/leave] Jogador ${jogador_id} removido de jogador_sala (Erro: ${deleteError ? deleteError.message : 'Nenhum'})`);
-       
        const io = getIO();
        if (io) {
-           if (salaFoiFechada) {
-               console.log(`---> [LEAVE /rooms/${salaId}/leave] Emitindo room:closed para sala ${salaId}`);
-               io.to(String(salaId)).emit('room:closed', { message: 'O host fechou a sala.' });
-           
-           } else if (salaData && salaData.status === 'open') { 
+           if (salaAbandonada) {
+               console.log(`---> [LEAVE /rooms/${salaId}/leave] Emitindo room:abandoned para sala ${salaId}`);
+               io.to(String(salaId)).emit('room:abandoned', { message: 'O criador abandonou a sala.' });
+           } else if (salaData && salaData.status === 'waiting') {
                const { data: jogadoresAtualizadosData, error: jogadoresError } = await supa
                    .from('jogador_sala')
                    .select('jogador:jogador_id ( jogador_id, nome_de_usuario )')
@@ -252,6 +209,8 @@ router.post('/:salaId/leave', requireAuth, async (req, res) => {
                    console.error(`---> [LEAVE /rooms/${salaId}/leave] Erro ao buscar jogadores atualizados pós-saída:`, jogadoresError);
                }
            }
+       } else {
+            console.warn(`---> [LEAVE /rooms/${salaId}/leave] Instância do Socket.IO não encontrada.`);
        }
        res.json({ success: true, message: 'Você saiu da sala.' });
 
@@ -262,68 +221,19 @@ router.post('/:salaId/leave', requireAuth, async (req, res) => {
 });
 
 
-// =================================================================
-// ROTA '/available' (CORRIGIDA E NO LOCAL CERTO)
-// =================================================================
-router.get('/available', requireAuth, async (req, res) => {
-  try {
-    console.log(`---> [GET /rooms/available] REQUISIÇÃO RECEBIDA`);
-    
-    // 1. Busca salas 'open' E o count de 'jogador_sala' associado
-    // Esta é a nova consulta, mais eficiente e que corrige o erro
-    const { data: salas, error: salasError } = await supa
-      .from('sala')
-      .select(`
-        sala_id, 
-        nome_sala,
-        jogador_sala ( count )
-      `)
-      .eq('status', 'open');
-      
-    if (salasError) throw salasError;
-
-    if (!salas || salas.length === 0) {
-      console.log(`---> [GET /rooms/available] Nenhuma sala 'open' encontrada.`);
-      return res.json([]);
-    }
-
-    // 2. Filtra e formata a resposta
-    // A 'data' será: [ { sala_id: 1, nome_sala: 'A', jogador_sala: [ { count: 1 } ] }, ... ]
-    const availableRooms = salas
-      .map(s => {
-        // Extrai o count do array aninhado
-        const playerCount = s.jogador_sala[0]?.count || 0; 
-        return {
-          sala_id: s.sala_id,
-          nome_sala: s.nome_sala,
-          player_count: playerCount
-        };
-      })
-      .filter(s => s.player_count < 2); // Filtra as que não estão cheias
-
-    console.log(`---> [GET /rooms/available] Retornando ${availableRooms.length} salas 'open'.`);
-    res.json(availableRooms);
-
-  } catch (e) {
-    console.error(`---> [GET /rooms/available] ERRO GERAL NO CATCH:`, e);
-    res.status(500).json({ error: e.message || 'Erro ao buscar salas disponíveis.' });
-  }
-});
-
-
 // --- ROTA EXISTENTE: Obter detalhes da sala ---
-// ESTA ROTA DEVE VIR *DEPOIS* DE /available
 router.get('/:salaId', requireAuth, async (req, res) => {
     try {
-        const salaId = Number(req.params.salaId);
+        // --- CORREÇÃO DE TIPO DE DADO ---
+        const salaId = Number(req.params.salaId); // Converte para Number
+        // -------------------------
         const current_jogador_id = req.user.jogador_id;
 
         console.log(`---> [GET /rooms/${salaId}] REQUISIÇÃO RECEBIDA por jogador ${current_jogador_id}`);
 
-        if (!salaId) { 
-            return res.status(400).json({ error: 'ID da sala é obrigatório.' });
-        }
+        if (!salaId) return res.status(400).json({ error: 'ID da sala é obrigatório.' });
 
+        // 1. Busca detalhes da sala
         const { data: salaData, error: salaError } = await supa
             .from('sala')
             .select(`
@@ -331,32 +241,34 @@ router.get('/:salaId', requireAuth, async (req, res) => {
                 jogador:jogador_criador_id ( nome_de_usuario ),
                 temas_excluidos, letras_excluidas
             `)
-            .eq('sala_id', salaId)
+            .eq('sala_id', salaId) // Agora 'salaId' é um Number
             .single();
 
         if (salaError) throw salaError;
         if (!salaData) {
+            console.log(`---> [GET /rooms/${salaId}] Sala NÃO encontrada no banco.`);
             return res.status(404).json({ error: 'Sala não encontrada.' });
         }
 
-        if (salaData.status === 'closed') { 
-            console.log(`---> [GET /rooms/${salaId}] Status é 'closed'. Retornando 410 Gone.`);
-            return res.status(410).json({ error: 'Esta sala foi fechada.' });
+        // ... (resto da lógica /:salaId)
+        console.log(`---> [GET /rooms/${salaId}] Status encontrado no banco: '${salaData.status}'`);
+        if (salaData.status === 'abandonada') {
+            console.log(`---> [GET /rooms/${salaId}] Status é 'abandonada'. Retornando 410 Gone.`);
+            return res.status(410).json({ error: 'Esta sala foi abandonada pelo criador.' });
         }
-        
+        console.log(`---> [GET /rooms/${salaId}] Status OK. Buscando jogadores...`);
         const { data: jogadoresData, error: jogadoresError } = await supa
             .from('jogador_sala')
             .select(`jogador:jogador_id ( jogador_id, nome_de_usuario )`)
             .eq('sala_id', salaId);
         if (jogadoresError) throw jogadoresError;
-        
         const jogadoresNaSala = (jogadoresData || []).map(js => js.jogador?.nome_de_usuario || `Jogador ${js.jogador?.jogador_id}`);
+        console.log(`---> [GET /rooms/${salaId}] Jogadores encontrados:`, jogadoresNaSala);
         const is_creator = salaData.jogador_criador_id === current_jogador_id;
-        
         const responseData = {
             sala_id: salaData.sala_id,
             nome_sala: salaData.nome_sala,
-            status: salaData.status, 
+            status: salaData.status,
             jogador: {
                 jogador_id: salaData.jogador_criador_id,
                 nome_de_usuario: salaData.jogador?.nome_de_usuario || 'Desconhecido'
@@ -376,6 +288,4 @@ router.get('/:salaId', requireAuth, async (req, res) => {
         res.status(500).json({ error: e.message || 'Erro ao buscar detalhes da sala.' });
     }
 });
-
-
 export default router;

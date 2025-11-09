@@ -31,9 +31,12 @@ export default function HomeScreen() {
           <button
             onClick={() => navigate('/lobby')} 
             className="w-full bg-accent text-black font-bold py-4 px-6 text-xl flex items-center justify-center gap-3 
-                       transition-transform duration-300 hover:scale-105 hover:[transform:translateZ(20px)] 
+                       transition-all duration-300 
+                       [transform:translateZ(0px)]
+                       hover:scale-105 hover:[transform:translateZ(20px)] 
                        shadow-lg shadow-accent/20
-                       cursor-target" 
+                       cursor-target
+                       relative z-10" 
             data-augmented-ui="tl-clip tr-clip br-clip bl-clip border"
           >
             <Play size={24} />
@@ -42,9 +45,12 @@ export default function HomeScreen() {
           <button
             onClick={() => navigate('/shop')}
             className="w-full bg-primary text-black font-bold py-4 px-6 text-xl flex items-center justify-center gap-3 
-                       transition-transform duration-300 hover:scale-105 hover:[transform:translateZ(20px)] 
+                       transition-all duration-300 
+                       [transform:translateZ(0px)]
+                       hover:scale-105 hover:[transform:translateZ(20px)] 
                        shadow-lg shadow-primary/20
-                       cursor-target"
+                       cursor-target
+                       relative z-10"
             data-augmented-ui="tl-clip tr-clip br-clip bl-clip border"
           >
             <Store size={24} />

@@ -195,7 +195,10 @@ export default function LobbyScreen() {
             />
             <button
               className="bg-secondary hover:bg-secondary/80 text-black px-6 py-3 rounded font-bold tracking-wider transition-all disabled:bg-gray-500 disabled:cursor-not-allowed
-                        [transform-style:preserve-3d] hover:[transform:translateZ(15px)] active:[transform:translateZ(5px)] cursor-target"
+                        [transform-style:preserve-3d] 
+                        [transform:translateZ(0px)]
+                        hover:[transform:translateZ(15px)] active:[transform:translateZ(5px)] 
+                        relative z-10 cursor-target"
               // Chama a função 'joinExisting' sem argumento, 
               // ela usará o valor do input 'roomIdToJoin'
               onClick={() => joinExisting()} 
