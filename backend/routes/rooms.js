@@ -111,7 +111,7 @@ router.post('/join', requireAuth, async (req, res) => {
         return res.status(400).json({ error: 'sala_id required' });
     }
 
-    // --- VERIFICAÇÃO DE HOST/JOGADOR ---
+    // --- VERIFICAÇÃO MULTI-SALA (JOGADOR) ---
     const { data: existingSalas, error: checkError } = await supa
       .from('jogador_sala')
       .select('sala_id, sala:sala_id ( status )')
@@ -120,7 +120,7 @@ router.post('/join', requireAuth, async (req, res) => {
     if (checkError) throw checkError;
 
     const otherActiveSalas = (existingSalas || []).filter(js => 
-      js.sala_id !== sala_id && // Ignora a sala que está tentando entrar
+      js.sala_id !== sala_id && 
       js.sala && (js.sala.status === 'open' || js.sala.status === 'playing')
     );
     
@@ -141,13 +141,11 @@ router.post('/join', requireAuth, async (req, res) => {
         return res.status(404).json({ error: 'Sala não encontrada' });
     }
 
-    // Verifica se a sala está aberta
-    if (salaData.status !== 'open') { // USA 'open'
+    if (salaData.status !== 'open') {
         console.log(`---> [POST /rooms/join] Erro: Sala ${sala_id} não está 'open' (status: ${salaData.status}).`);
         return res.status(400).json({ error: 'Sala não está aguardando jogadores (status: ' + salaData.status + ')' });
     }
     
-    // ... (lógica de contagem de jogadores permanece a mesma) ...
     const { data: jogadoresExistentes, error: countError } = await supa
         .from('jogador_sala')
         .select('jogador_id', { count: 'exact' })
@@ -166,7 +164,6 @@ router.post('/join', requireAuth, async (req, res) => {
         }
     }
     
-    // ... (lógica de upsert e emissão de socket permanece a mesma) ...
     await supa
         .from('jogador_sala')
         .upsert({ jogador_id, sala_id }, { onConflict: 'jogador_id, sala_id' });
@@ -186,7 +183,6 @@ router.post('/join', requireAuth, async (req, res) => {
 
   } catch (e) {
     console.error(`---> [POST /rooms/join] ERRO GERAL NO CATCH para sala ${sala_id} por jogador ${jogador_id}:`, e);
-    // ... (tratamento de erro permanece o mesmo) ...
     if (e.code === '23505' || (e.message && e.message.includes('jogador_sala_pkey'))) {
          return res.json({ sala_id: req.body.sala_id, guest_user: req.user.jogador_id });
     } else if (e.code === 'PGRST116') {
@@ -196,7 +192,7 @@ router.post('/join', requireAuth, async (req, res) => {
   }
 });
 
-// --- ROTA: Sair da sala ---
+// --- ROTA: Sair da sala (COM LÓGICA DE HOST) ---
 router.post('/:salaId/leave', requireAuth, async (req, res) => {
    try {
        const salaId = Number(req.params.salaId);
@@ -211,29 +207,25 @@ router.post('/:salaId/leave', requireAuth, async (req, res) => {
            .maybeSingle();
        if (salaError) throw salaError;
        
-       let salaFoiFechada = false; // Variável para controlar o evento socket
+       let salaFoiFechada = false; 
 
-       // --- INÍCIO DA LÓGICA DE HOST ---
-       // Se o jogador que está saindo é o criador E a sala está 'open'
        if (salaData && salaData.jogador_criador_id === jogador_id && salaData.status === 'open') {
            console.log(`---> [LEAVE /rooms/${salaId}/leave] Host (jogador ${jogador_id}) está saindo. ATUALIZANDO sala para 'closed'.`);
            
            const { error: updateError } = await supa
                .from('sala')
-               .update({ status: 'closed' }) // Define o status como 'closed'
+               .update({ status: 'closed' }) 
                .eq('sala_id', salaId);
                
            if (updateError) {
                console.error(`---> [LEAVE /rooms/${salaId}/leave] Erro ao atualizar status para 'closed':`, updateError);
            } else {
-               salaFoiFechada = true; // Marca que a sala foi fechada
+               salaFoiFechada = true; 
            }
        } else {
            console.log(`---> [LEAVE /rooms/${salaId}/leave] Saindo como jogador normal. Status da sala não alterado.`);
        }
-       // --- FIM DA LÓGICA DE HOST ---
 
-       // Remove o jogador da sala (seja host ou não)
        const { error: deleteError } = await supa
            .from('jogador_sala')
            .delete()
@@ -244,13 +236,10 @@ router.post('/:salaId/leave', requireAuth, async (req, res) => {
        const io = getIO();
        if (io) {
            if (salaFoiFechada) {
-               // Avisa a todos na sala (incluindo o host que está saindo) que a sala fechou
                console.log(`---> [LEAVE /rooms/${salaId}/leave] Emitindo room:closed para sala ${salaId}`);
                io.to(String(salaId)).emit('room:closed', { message: 'O host fechou a sala.' });
            
            } else if (salaData && salaData.status === 'open') { 
-               // Se a sala NÃO foi fechada (ou seja, um jogador normal saiu)
-               // Apenas atualiza a lista de players para quem ficou
                const { data: jogadoresAtualizadosData, error: jogadoresError } = await supa
                    .from('jogador_sala')
                    .select('jogador:jogador_id ( jogador_id, nome_de_usuario )')
@@ -264,7 +253,6 @@ router.post('/:salaId/leave', requireAuth, async (req, res) => {
                }
            }
        }
-       // Responde sucesso em ambos os casos (host saindo ou jogador saindo)
        res.json({ success: true, message: 'Você saiu da sala.' });
 
    } catch (e) {
@@ -274,13 +262,67 @@ router.post('/:salaId/leave', requireAuth, async (req, res) => {
 });
 
 
+// =================================================================
+// ROTA '/available' (CORRIGIDA E NO LOCAL CERTO)
+// =================================================================
+router.get('/available', requireAuth, async (req, res) => {
+  try {
+    console.log(`---> [GET /rooms/available] REQUISIÇÃO RECEBIDA`);
+    
+    // 1. Busca salas 'open' E o count de 'jogador_sala' associado
+    // Esta é a nova consulta, mais eficiente e que corrige o erro
+    const { data: salas, error: salasError } = await supa
+      .from('sala')
+      .select(`
+        sala_id, 
+        nome_sala,
+        jogador_sala ( count )
+      `)
+      .eq('status', 'open');
+      
+    if (salasError) throw salasError;
+
+    if (!salas || salas.length === 0) {
+      console.log(`---> [GET /rooms/available] Nenhuma sala 'open' encontrada.`);
+      return res.json([]);
+    }
+
+    // 2. Filtra e formata a resposta
+    // A 'data' será: [ { sala_id: 1, nome_sala: 'A', jogador_sala: [ { count: 1 } ] }, ... ]
+    const availableRooms = salas
+      .map(s => {
+        // Extrai o count do array aninhado
+        const playerCount = s.jogador_sala[0]?.count || 0; 
+        return {
+          sala_id: s.sala_id,
+          nome_sala: s.nome_sala,
+          player_count: playerCount
+        };
+      })
+      .filter(s => s.player_count < 2); // Filtra as que não estão cheias
+
+    console.log(`---> [GET /rooms/available] Retornando ${availableRooms.length} salas 'open'.`);
+    res.json(availableRooms);
+
+  } catch (e) {
+    console.error(`---> [GET /rooms/available] ERRO GERAL NO CATCH:`, e);
+    res.status(500).json({ error: e.message || 'Erro ao buscar salas disponíveis.' });
+  }
+});
+
+
 // --- ROTA EXISTENTE: Obter detalhes da sala ---
+// ESTA ROTA DEVE VIR *DEPOIS* DE /available
 router.get('/:salaId', requireAuth, async (req, res) => {
     try {
         const salaId = Number(req.params.salaId);
         const current_jogador_id = req.user.jogador_id;
 
-        if (!salaId) return res.status(400).json({ error: 'ID da sala é obrigatório.' });
+        console.log(`---> [GET /rooms/${salaId}] REQUISIÇÃO RECEBIDA por jogador ${current_jogador_id}`);
+
+        if (!salaId) { 
+            return res.status(400).json({ error: 'ID da sala é obrigatório.' });
+        }
 
         const { data: salaData, error: salaError } = await supa
             .from('sala')
@@ -297,13 +339,11 @@ router.get('/:salaId', requireAuth, async (req, res) => {
             return res.status(404).json({ error: 'Sala não encontrada.' });
         }
 
-        // Altera 'abandonada' para 'closed'
-        if (salaData.status === 'closed') { // USA 'closed'
+        if (salaData.status === 'closed') { 
             console.log(`---> [GET /rooms/${salaId}] Status é 'closed'. Retornando 410 Gone.`);
-            return res.status(410).json({ error: 'Esta sala foi fechada.' }); // Mensagem mais genérica
+            return res.status(410).json({ error: 'Esta sala foi fechada.' });
         }
         
-        // ... (lógica para buscar jogadores permanece a mesma) ...
         const { data: jogadoresData, error: jogadoresError } = await supa
             .from('jogador_sala')
             .select(`jogador:jogador_id ( jogador_id, nome_de_usuario )`)
@@ -316,7 +356,7 @@ router.get('/:salaId', requireAuth, async (req, res) => {
         const responseData = {
             sala_id: salaData.sala_id,
             nome_sala: salaData.nome_sala,
-            status: salaData.status, // enviará 'open' ou 'playing'
+            status: salaData.status, 
             jogador: {
                 jogador_id: salaData.jogador_criador_id,
                 nome_de_usuario: salaData.jogador?.nome_de_usuario || 'Desconhecido'
@@ -330,59 +370,12 @@ router.get('/:salaId', requireAuth, async (req, res) => {
 
     } catch (e) {
         console.error(`---> [GET /rooms/${req.params.salaId}] ERRO GERAL NO CATCH:`, e);
-        if (e.code === 'PGRST116') {
+        if (e.code === 'PGRST116') { // Not found from single()
              return res.status(404).json({ error: 'Sala não encontrada.' });
         }
         res.status(500).json({ error: e.message || 'Erro ao buscar detalhes da sala.' });
     }
 });
 
-// --- ROTA: Listar salas disponíveis ---
-router.get('/available', requireAuth, async (req, res) => {
-  try {
-    console.log(`---> [GET /rooms/available] REQUISIÇÃO RECEBIDA`);
-    
-    // Altera 'waiting' para 'open'
-    const { data: salas, error: salasError } = await supa
-      .from('sala')
-      .select('sala_id, nome_sala')
-      .eq('status', 'open'); // USA 'open'
-      
-    if (salasError) throw salasError;
-
-    if (!salas || salas.length === 0) {
-      console.log(`---> [GET /rooms/available] Nenhuma sala 'open' encontrada.`);
-      return res.json([]);
-    }
-
-    // ... (lógica de contagem e filtro permanece a mesma) ...
-    const salaIds = salas.map(s => s.sala_id);
-    const { data: counts, error: countError } = await supa
-      .from('jogador_sala')
-      .select('sala_id, count', { count: 'exact' })
-      .in('sala_id', salaIds)
-      .group('sala_id');
-    
-    if (countError) throw countError;
-
-    const countMap = (counts || []).reduce((acc, c) => {
-      acc[c.sala_id] = c.count;
-      return acc;
-    }, {});
-
-    const availableRooms = salas.map(s => ({
-      sala_id: s.sala_id,
-      nome_sala: s.nome_sala,
-      player_count: countMap[s.sala_id] || 0
-    })).filter(s => (s.player_count || 0) < 2);
-
-    console.log(`---> [GET /rooms/available] Retornando ${availableRooms.length} salas 'open'.`);
-    res.json(availableRooms);
-
-  } catch (e) {
-    console.error(`---> [GET /rooms/available] ERRO GERAL NO CATCH:`, e);
-    res.status(500).json({ error: e.message || 'Erro ao buscar salas disponíveis.' });
-  }
-});
 
 export default router;
