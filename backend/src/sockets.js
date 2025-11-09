@@ -3,6 +3,7 @@ import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { supa } from '../services/supabase.js'; //
 import { endRoundAndScore, getNextRoundForSala, getJogadoresDaSala, getRoundResults } from '../services/game.js'; //
+import { saveRanking } from '../services/ranking.js'; //
 
 const JWT_SECRET = process.env.JWT_SECRET || 'developer_secret_key'; //
 
@@ -351,6 +352,13 @@ export function scheduleRoundCountdown({ salaId, roundId, duration = 20 }) { //
               console.error(`[TIMER] Erro ao atualizar status da sala ${salaId} para terminada:`, updateSalaError);
           }
 
+          // Salva ranking da partida
+          try {
+              await saveRanking({ salaId, totais: payload.totais, winnerInfo });
+          } catch (rankingError) {
+              console.error(`[TIMER->MATCH_END] Erro ao salvar ranking para sala ${salaId}:`, rankingError);
+          }
+
           io.to(salaId).emit('match:end', { //
                 totais: payload.totais, // Envia totais
                 vencedor: winnerInfo // Envia info do vencedor
@@ -606,6 +614,13 @@ export function initSockets(httpServer) { //
             .eq('sala_id', salaId); //
           if (updateSalaStopError) {
                console.error(`[STOP] Erro ao atualizar status da sala ${salaId} para terminada:`, updateSalaStopError);
+          }
+
+          // Salva ranking da partida
+          try {
+              await saveRanking({ salaId, totais: payload.totais, winnerInfo });
+          } catch (rankingError) {
+              console.error(`[STOP->MATCH_END] Erro ao salvar ranking para sala ${salaId}:`, rankingError);
           }
 
           io.to(salaId).emit('match:end', { //

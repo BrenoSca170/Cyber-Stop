@@ -10,6 +10,8 @@ import GameScreen from './pages/GameScreen'
 import ShopScreen from './pages/ShopScreen'
 import WaitingRoomScreen from './pages/WaitingRoomScreen'
 import Login from './pages/Login'
+import ProfileScreen from './pages/ProfileScreen'
+import RankingScreen from './pages/RankingScreen'
 import './index.css'
 
 function RequireAuth({ children }) {
@@ -47,6 +49,18 @@ const router = createBrowserRouter([
         path: 'shop',
         element: <ShopScreen />
       },
+      {
+        path: 'Profile',
+        element:<ProfileScreen/>
+      },
+      {
+        path: 'ranking',
+        element: <RankingScreen />
+      },
+      {
+        path: 'ranking/sala/:salaId',
+        element: <RankingScreen />
+      }
     ],
   },
 ])

@@ -2,8 +2,9 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Trophy, Users, GitMerge, Home } from 'lucide-react'; // Ícones temáticos
+import Ranking from '../Ranking.jsx'; // Componente de ranking
 
-export default function MatchEndScreen({ totais, vencedor, meuJogadorId, onReFetchInventory }) {
+export default function MatchEndScreen({ totais, vencedor, meuJogadorId, salaId, onReFetchInventory }) {
   const navigate = useNavigate();
 
   // Rebusca o inventário (para moedas) quando esta tela aparece
@@ -118,6 +119,13 @@ export default function MatchEndScreen({ totais, vencedor, meuJogadorId, onReFet
         </table>
       </div>
       {/* === [FIM] PLACAR FINAL EM TABELA === */}
+      
+      {/* Ranking da Sala */}
+      {salaId && (
+        <div className="mt-8">
+          <Ranking salaId={salaId} limit={10} autoRefresh={false} />
+        </div>
+      )}
       
       {/* Botão para voltar ao Lobby (sem alteração) */}
       <button
