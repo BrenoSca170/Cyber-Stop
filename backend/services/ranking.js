@@ -64,6 +64,7 @@ export async function getGlobalRanking(limit = 10) {
       .select(`
         jogador_id,
         pontuacao_total,
+        vencedor,
         jogador:jogador_id (
           jogador_id,
           nome_de_usuario
