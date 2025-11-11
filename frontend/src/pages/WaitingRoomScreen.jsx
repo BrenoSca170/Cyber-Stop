@@ -1,307 +1,201 @@
-import { useState, useEffect } from 'react';
+// src/pages/WaitingRoomScreen.jsx
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import socket, { joinRoom } from '../lib/socket';
+import GlitchText from '../components/GlitchText'; // REATIVADO
+import PlayerCard from '../components/game/PlayerCard';
+import GlitchButton from '../components/GlitchButton'; // REATIVADO
 import api from '../lib/api';
-import socket from '../lib/socket';
-import { ArrowLeft, Loader2, Play, ClipboardCopy, Users } from 'lucide-react';
-import LetterGlitch from '../components/LetterGlitch';
-import PixelBlast from '../components/PixelBlast';
-import Hyperspeed from '../components/Hyperspeed';
 
-function WaitingRoomScreen() {
-    const { salaId } = useParams(); 
-    const navigate = useNavigate(); 
-    const [sala, setSala] = useState(null); 
-    const [loading, setLoading] = useState(true); 
-    const [error, setError] = useState(''); 
-    const [copySuccess, setCopySuccess] = useState(''); 
-    const [leaving, setLeaving] = useState(false); 
+export default function WaitingRoomScreen() {
+  const { salaId } = useParams();
+  const navigate = useNavigate();
 
-    // ... (Todas as funções: copyToClipboard, handleStartGame, handleLeaveRoom) ...
-    // ... (Toda a lógica dentro do useEffect) ...
-    // NENHUMA LÓGICA PRECISA MUDAR.
+  const [meuJogador, setMeuJogador] = useState(null);
+  const [oponente, setOponente] = useState(null);
+  const [nomeSala, setNomeSala] = useState(''); 
+  const [isHost, setIsHost] = useState(false);
+  const [meuJogadorId, setMeuJogadorId] = useState(null);
 
-    // --- Funções de Lógica (sem alteração) ---
-    const copyToClipboard = async () => { 
-        try { 
-            await navigator.clipboard.writeText(salaId); 
-            setCopySuccess('ID copiado!'); 
-            setTimeout(() => setCopySuccess(''), 2000); 
-        } catch (err) { 
-            setCopySuccess('Falha ao copiar'); 
-            console.error('Falha ao copiar ID da sala: ', err); 
-            setTimeout(() => setCopySuccess(''), 2000); 
-        }
-    };
-    const handleStartGame = async () => { 
-        setLoading(true); 
-        setError(''); 
-        try { 
-            await api.post(`/matches/start`, { sala_id: Number(salaId) });
-        } catch (err) { 
-            console.error('Erro ao iniciar partida:', err); 
-            setError(err.response?.data?.error || err.message || 'Falha ao iniciar a partida.'); 
-            setLoading(false); 
-        }
-    };
-    const handleLeaveRoom = async () => { 
-      setLeaving(true);
-      setError('');
+  useEffect(() => {
+    joinRoom(salaId);
+    const myId = localStorage.getItem('meuJogadorId'); 
+    setMeuJogadorId(myId); // Armazena o ID no estado
+
+    const fetchSalaInfo = async () => {
       try {
-          await api.post(`/rooms/${salaId}/leave`); 
-          navigate('/'); 
-      } catch (error) {
-          console.error("Erro ao sair da sala:", error);
-          setError(error.response?.data?.error || error.message || 'Falha ao sair da sala.');
-          setTimeout(() => setError(''), 3000);
-          setLeaving(false); 
+        const { data } = await api.get(`/rooms/${salaId}`); 
+        if (data) {
+          setNomeSala(data.nome_sala || 'Sala Clandestina');
+          
+          // --- CORREÇÃO APLICADA AQUI ---
+          // IDs são tratados para remover espaços em branco antes da comparação
+          const meuIdTratado = myId ? String(myId).trim() : null;
+          const hostIdTratado = data.host_id ? String(data.host_id).trim() : null;
+
+          // Debug para o console (F12)
+          console.log("Meu ID (localStorage):", meuIdTratado);
+          console.log("Host ID (API):", hostIdTratado);
+
+          const euSouHost = meuIdTratado === hostIdTratado;
+          console.log("Eu sou o host?", euSouHost);
+          
+          setIsHost(euSouHost);
+          // --- FIM DA CORREÇÃO ---
+        }
+      } catch (e) { setNomeSala('Sala Clandestina'); }
+    };
+
+    const fetchMe = async () => {
+      try {
+        const { data } = await api.get('/auth/me'); 
+        setMeuJogador({
+          nome: data.nome_de_usuario,
+          avatarId: data.avatar_nome,
+          rank: data.rank || 5 // ❗ DADO FALSO! Atualize sua API
+        });
+      } catch (e) {
+        setMeuJogador({
+          nome: localStorage.getItem('nome_de_usuario') || 'Player 1',
+          avatarId: localStorage.getItem('avatar_id') || 'vitaooriginal',
+          rank: 5 // ❗ DADO FALSO!
+        });
       }
     };
-    useEffect(() => { 
-        let isMounted = true; 
-        let intervalId = null; 
-        let initialLoadAttempted = false; 
+    
+    fetchMe();
+    fetchSalaInfo(); 
 
-        const fetchSalaState = async (isInitial = false) => {
-            if (!isMounted) return; 
-             if (isInitial) setLoading(true);
-            try { 
-                const response = await api.get(`/rooms/${salaId}`); 
-                const salaData = response.data; 
-                if (isMounted) { 
-                    setSala(salaData); 
-                    setError(''); 
-                    if (salaData.status === 'in_progress') {
-                         console.log(`[Polling] Detectou status 'in_progress'. Navegando imediatamente...`);
-                         if (intervalId) clearInterval(intervalId); 
-                         socket.off('room:players_updated', handlePlayersUpdate);
-                         socket.off('room:abandoned', handleRoomAbandoned);
-                         socket.off('round:ready', handleGameStarted);
-                         socket.off('round:started', handleGameStarted);
-                         // Navega imediatamente quando detecta in_progress
-                         navigate(`/game/${salaId}`, { replace: true }); 
-                         return; 
-                    }
-                     if (salaData.status === 'terminada' || salaData.status === 'abandonada') {
-                         console.log(`Sala ${salaId} com status ${salaData.status}, voltando ao lobby.`);
-                         alert(`A sala foi ${salaData.status}.`);
-                         navigate('/');
-                     }
-                }
-            } catch (err) { 
-                console.error('Erro ao buscar estado da sala:', err); 
-                 if (isMounted) { 
-                    if (err.response?.status === 404 || err.response?.status === 410) { 
-                        if (!initialLoadAttempted) {
-                            console.warn("Falha na busca inicial da sala (404/410).");
-                            setError('Conectando à sala... (tentativa 1 falhou, tentando de novo...)');
-                        } else {
-                            alert(err.response?.data?.error || 'Sala não encontrada ou abandonada.'); 
-                            navigate('/'); 
-                        }
-                    }
-                     else { 
-                        if (initialLoadAttempted) { 
-                           setError('Não foi possível atualizar o estado da sala. Tentando novamente...'); 
-                        } else {
-                           setError('Falha ao carregar dados da sala.');
-                           console.warn("Falha na busca inicial da sala (outro erro)."); 
-                        }
-                    }
-                 }
-           } finally { 
-               if (isMounted && !initialLoadAttempted) { 
-                   initialLoadAttempted = true; 
-                   setLoading(false); 
-               } else if (isMounted && isInitial) {
-                    setLoading(false); 
-               }
-           }
-        };
-       const handlePlayersUpdate = ({ jogadores }) => {
-           console.log('Recebido room:players_updated', jogadores);
-           if (isMounted) {
-               setSala(currentSala => {
-                   if (!currentSala) return null; 
-                   return { ...currentSala, jogadores: jogadores };
-               });
-           }
-       };
-       const handleRoomAbandoned = ({ message }) => {
-           console.log('Recebido room:abandoned', message);
-           if (isMounted) {
-               alert(message || 'O criador abandonou a sala. Voltando ao lobby.');
-               navigate('/');
-           }
-       };
-       const handleGameStarted = (data) => {
-            console.log("Recebido 'round:ready' ou 'round:started'. Navegando imediatamente...", data);
-            if (isMounted) {
-                if (intervalId) clearInterval(intervalId);
-                socket.off('room:players_updated', handlePlayersUpdate);
-                socket.off('room:abandoned', handleRoomAbandoned);
-                socket.off('round:ready', handleGameStarted); 
-                socket.off('round:started', handleGameStarted); 
-                navigate(`/game/${salaId}`, { replace: true }); 
-            }
-       };
-       // Registra listeners ANTES de entrar na sala
-       socket.on('room:players_updated', handlePlayersUpdate);
-       socket.on('room:abandoned', handleRoomAbandoned);
-       socket.on('round:ready', handleGameStarted); 
-       socket.on('round:started', handleGameStarted);
-       
-       // Garante que o socket está na sala
-       socket.emit('join-room', String(salaId)); 
-       console.log(`Socket join-room emitido para sala ${salaId}`);
-       
-       // Re-emite join-room após um pequeno delay para garantir conexão
-       setTimeout(() => {
-         socket.emit('join-room', String(salaId));
-         console.log(`Socket join-room re-emitido para sala ${salaId} (garantia)`);
-       }, 500);
-        fetchSalaState(true); 
-        // Polling mais frequente (1s) para detectar início mais rápido
-        intervalId = setInterval(() => {
-          fetchSalaState(false);
-        }, 1000); // Polling a cada 1 segundo 
-        return () => { 
-            console.log("Limpando WaitingRoomScreen"); 
-            isMounted = false; 
-            if (intervalId) clearInterval(intervalId); 
-           socket.off('room:players_updated', handlePlayersUpdate);
-           socket.off('room:abandoned', handleRoomAbandoned);
-           socket.off('round:ready', handleGameStarted); 
-           socket.off('round:started', handleGameStarted); 
-        };
-    }, [salaId, navigate]); 
+    const handlePlayersUpdate = (payload) => {
+      // Também usa .trim() para consistência ao encontrar o oponente
+      const meuIdTratado = myId ? String(myId).trim() : null;
+      const oponenteData = payload.jogadores.find(j => String(j.jogador_id).trim() !== meuIdTratado);
+      
+      if (oponenteData) {
+        setOponente({
+          nome: oponenteData.nome_de_usuario,
+          avatarId: oponenteData.avatar_nome,
+          rank: oponenteData.rank || '??' // ❗ DADO FALSO! Atualize seu backend
+        });
+      } else {
+        setOponente(null);
+      }
+    };
+    
+    const handleMatchStart = (data) => navigate(`/game/${salaId}`);
 
-    // --- Renderização com Alterações ---
-    if (loading || !sala) { 
-        return ( 
-             <div className="text-white text-center p-10 flex flex-col items-center justify-center gap-4 font-cyber">
-               <Loader2 className="animate-spin h-10 w-10 text-secondary" /> 
-               <p>Acessando Nó #{salaId}...</p> 
-               {error && <p className="text-warning mt-2">{error}</p>} 
-             </div>
-        );
+    socket.on('room:players_updated', handlePlayersUpdate);
+    socket.on('match:start', handleMatchStart); 
+    api.get(`/rooms/${salaId}/players`)
+       .then(response => handlePlayersUpdate(response.data))
+       .catch(err => console.error("Erro ao buscar jogadores:", err));
+
+    return () => {
+      socket.off('room:players_updated', handlePlayersUpdate);
+      socket.off('match:start', handleMatchStart);
+    };
+  }, [salaId, navigate]);
+
+
+  const handleStartMatch = () => {
+    if (isHost && oponente) {
+      socket.emit('match:initiate_start', { salaId });
     }
+  };
 
-    return ( 
-        <div className="relative flex flex-col items-center justify-center min-h-[calc(100vh-120px)] text-white p-4 font-cyber [perspective:1000px]">
-            <PixelBlast className="relative inset-0 w-full h-full z-0" />
-            <div className="absolute z-10 w-full max-w-2xl mx-auto">
-                {/* Botão Sair */}
-                <button
-                    onClick={handleLeaveRoom} 
-                    disabled={leaving} 
-                    className="absolute top-4 left-4 md:top-6 md:left-6 text-text-muted hover:text-primary transition-colors flex items-center gap-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed" 
-                    title="Sair da sala" 
-                >
-                    {leaving ? <Loader2 size={16} className="animate-spin" /> : <ArrowLeft size={16} />} 
-                    {leaving ? 'Desconectando...' : 'Voltar ao Lobby'} 
-                </button>
+  const handleLeaveRoom = () => {
+    navigate('/lobby');
+  };
 
-                {/* Cabeçalho da Sala */}
-                 <div className="text-center mb-8 pt-8 md:pt-4">
-                    <h1 className="text-3xl md:text-4xl font-bold mb-2 text-accent">{sala.nome_sala}</h1> 
+  // Renderiza status no estilo "Cyber"
+  const renderStatusAndActions = () => {
+    const statusStyle = "text-xl text-yellow-400 animate-pulse font-mono";
+    if (!oponente) {
+      return <p className={statusStyle}>[ ESPERANDO JOGADOR 02... ]</p>;
+    }
+    // Esta condição agora deve funcionar corretamente
+    if (oponente && isHost) {
+      return <GlitchButton onClick={handleStartMatch}>INICIAR PARTIDA</GlitchButton>;
+    }
+    if (oponente && !isHost) {
+      return <p className={statusStyle}>[ ESPERANDO HOST INICIAR... ]</p>;
+    }
+    return null;
+  };
 
-                    {/* ID da Sala para compartilhar (estilizado) */}
-                    <div className="flex items-center justify-center gap-2 mt-3 mb-2"> 
-                        <span className="text-text-muted">ID do Nó:</span> 
-                        <span className="text-2xl font-mono text-warning bg-black/50 px-3 py-1 rounded border border-dashed border-warning/50"> 
-                            {salaId} 
-                        </span>
-                        <button onClick={copyToClipboard} title="Copiar ID" className="text-text-muted hover:text-warning transition-colors p-1"> 
-                            <ClipboardCopy size={20}/> 
-                        </button>
-                    </div>
-                    {copySuccess && <p className="text-xs text-accent h-4">{copySuccess}</p>} 
+  // --- JSX ATUALIZADO COM A ESTÉTICA CYBERPUNK (image_b1d273.jpg) ---
+  return (
+    <div className="flex flex-col h-screen w-full bg-black text-white p-8 overflow-hidden font-sans">
+      
+      {/* 1. TOPO: Botão de Voltar e Título */}
+      <div className="w-full flex justify-between items-center mb-4">
+        <GlitchButton onClick={handleLeaveRoom}>
+          &lt; VOLTAR AO LOBBY
+        </GlitchButton>
+        
+        <motion.div 
+          className="text-center"
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <h1 className="text-2xl text-gray-400 font-semibold uppercase tracking-widest">
+            {nomeSala || 'Carregando...'}
+          </h1>
+          <p className="text-lg text-cyan-400 font-mono">
+            SALA ID: {salaId}
+          </p>
+        </motion.div>
+        
+        <div style={{ width: '150px' }} /> {/* Espaçador */}
+      </div>
 
-                    <p className="text-text-muted mt-2 text-sm">Host: {sala.jogador?.nome_de_usuario || 'Desconhecido'}</p> 
-                     <p className={`mt-1 text-sm font-semibold ${
-                          sala.status === 'waiting' ? 'text-warning'
-                        : sala.status === 'in_progress' ? 'text-accent'
-                        : sala.status === 'terminada' ? 'text-secondary'
-                        : sala.status === 'abandonada' ? 'text-primary'
-                        : 'text-text-muted' 
-                     }`}> 
-                        Status: {
-                            sala.status === 'waiting' ? 'Aguardando Conexões...'
-                          : sala.status === 'in_progress' ? 'Em Jogo'
-                          : sala.status === 'terminada' ? 'Partida Terminada'
-                          : sala.status === 'abandonada' ? 'Nó Abandonado'
-                          : sala.status 
-                        } 
-                     </p>
-                     {error && <p className="text-red-400 mt-2 text-sm">{error}</p>} 
-                </div>
+      {/* 2. CENTRO: Área dos Jogadores (flex-grow) */}
+      <div className="flex-grow flex items-center justify-center w-full">
+        <div className="flex flex-row items-center justify-around w-full max-w-5xl">
+          
+          {/* Jogador 1 (Você) - SEM NOME ACIMA */}
+          <PlayerCard 
+            playerTitle="PLAYER 01"
+            player={meuJogador}
+            isOpponent={false}
+            aguardando={!meuJogador}
+          />
 
-                {/* Lista de Jogadores (com augmented-ui) */}
-                <div 
-                  className="bg-bg-secondary p-4 md:p-6 mb-8 [transform-style:preserve-3d]"
-                  data-augmented-ui="tl-clip tr-clip br-clip bl-clip border"
-                >
-                    <h2 className="text-xl md:text-2xl font-semibold mb-4 flex items-center gap-2 text-secondary [transform:translateZ(10px)]"> 
-                       <Users size={24} /> Conexões ({sala.jogadores?.length || 0}/2) 
-                    </h2>
-                    <ul className="space-y-2 max-h-60 overflow-y-auto pr-2 [transform:translateZ(10px)]"> 
-                        {(sala.jogadores || []).map((nome, index) => ( 
-                           <li key={index} className="text-base md:text-lg bg-bg-input px-3 py-1.5 rounded flex items-center gap-2 border border-transparent"> 
-                              <span className={`h-2 w-2 rounded-full ${index === 0 ? 'bg-warning shadow-glow-warning' : 'bg-secondary shadow-glow-secondary'}`}></span> 
-                              {nome} 
-                              {index === 0 && <span className="text-xs text-warning font-semibold ml-auto">(Host)</span>} 
-                           </li>
-                        ))}
-                         {sala.jogadores?.length === 0 && !loading && <li className="text-text-muted/70 italic">Nenhuma conexão ainda.</li>} 
-                    </ul>
-                </div>
+          {/* VS - Cor Laranja/Vermelho com brilho */}
+          <motion.div
+            className="text-8xl font-black text-orange-500 mx-8"
+            style={{ textShadow: '0 0 15px rgba(249, 115, 22, 0.5)' }}
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1, transition: { delay: 0.5 } }}
+          >
+                <GlitchText text="Versus" fontSize={3} color="rgb(57, 255, 20)" fontWeight="bold" textAlign="center" font="https://fonts.gstatic.com/s/orbitron/v35/yMJMMIlzdpvBhQQL_SC3X9yhF25-T1ny_Cmxpg.ttf" />
+          </motion.div>
 
-                {/* Botão de Iniciar Partida ou Mensagem de Espera */}
-                {sala.status === 'waiting' && ( 
-                    <div className="mt-8 md:mt-6 text-center [transform-style:preserve-3d]">
-                        {sala.is_creator && ( 
-                            <button
-                                onClick={handleStartGame} 
-                                disabled={loading || sala.jogadores?.length < 2} 
-                                className="px-8 py-3 md:px-10 md:py-4 bg-accent text-black rounded-lg font-bold text-lg md:text-xl 
-                                           hover:bg-accent/80 disabled:bg-gray-500 disabled:cursor-not-allowed 
-                                           transition-all 
-                                           [transform:translateZ(0px)]
-                                           hover:scale-105 hover:[transform:translateZ(15px)] active:[transform:translateZ(5px)]
-                                           flex items-center justify-center gap-2 mx-auto shadow-lg shadow-accent/20
-                                           relative z-10" 
-                                title={sala.jogadores?.length < 2 ? "Precisa de pelo menos 2 conexões para iniciar" : "Iniciar a partida"} 
-                                data-augmented-ui="tl-scoop tr-scoop br-scoop bl-scoop"
-                            >
-                                {loading && !leaving ? <Loader2 className="animate-spin" /> : <Play />} 
-                                {loading && !leaving ? 'Iniciando...' : 'Iniciar Partida'} 
-                            </button>
-                        )}
-                        {!sala.is_creator && ( 
-                            <p className="text-base md:text-lg text-text-muted flex items-center justify-center gap-2"> 
-                               <Loader2 className="animate-spin h-5 w-5"/> Aguardando Host <span className="font-semibold text-warning">{sala.jogador?.nome_de_usuario || ''}</span> iniciar...
-                            </p>
-                        )}
-                        {sala.is_creator && sala.jogadores?.length < 2 && ( 
-                               <p className="text-sm text-warning/80 mt-2">Aguardando mais {2 - (sala.jogadores?.length || 0)} jogador(es) para iniciar (máximo 2).</p> 
-                        )}
-                        {sala.jogadores?.length === 2 && sala.status === 'waiting' && (
-                            <p className="text-sm text-accent/80 mt-2">Sala cheia! Pronto para iniciar.</p>
-                        )}
-                    </div>
-                )}
-                 {sala.status !== 'waiting' && !loading && sala.status !== 'abandonada' && sala.status !== 'terminada' &&( 
-                      <p className="text-base md:text-lg text-secondary text-center">Partida em andamento ou finalizada...</p> 
-                 )}
-                  {(sala.status === 'abandonada' || sala.status === 'terminada') && !loading && (
-                        <p className={`text-base md:text-lg text-center font-semibold ${sala.status === 'abandonada' ? 'text-primary' : 'text-secondary'}`}>
-                           Este Nó foi {sala.status}.
-                        </p>
-                  )}
-            </div>
+          {/* Jogador 2 (Oponente) - SEM NOME ACIMA */}
+          <PlayerCard 
+            playerTitle="PLAYER 02"
+            player={oponente}
+            isOpponent={true}
+            aguardando={!oponente}
+          />
+
         </div>
-    );
+      </div>
+
+      {/* 3. FUNDO: Área de Status e Ações */}
+      <div className="w-full flex justify-center pb-8 h-16 items-center">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={oponente ? (isHost ? 'host' : 'guest') : 'waiting'}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+          >
+            {renderStatusAndActions()}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+    </div>
+  );
 }
-
-
-export default WaitingRoomScreen;

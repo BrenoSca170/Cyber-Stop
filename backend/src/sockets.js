@@ -16,6 +16,13 @@ const MOEDAS_PARTICIPACAO = 5; //
 
 let io; //
 
+// ... (Armazenamento em Memória para Power-ups - Sem Mudanças) ...
+// (Funções helpers de Power-ups - Sem Mudanças) ...
+// (Funções de Timer - Sem Mudanças) ...
+// (Funções de Moedas - Sem Mudanças) ...
+// (Função getSocketIdByPlayerId - Sem Mudanças) ...
+// (Função scheduleRoundCountdown - Sem Mudanças) ...
+
 // ===== Armazenamento em Memória para Power-ups Ativos na Rodada =====
 // Guarda quem ativou a revelação em qual rodada. Formato: Map<salaId, Map<roundId, Set<jogadorId>>>
 const activeRevealRequests = new Map(); //
@@ -239,7 +246,6 @@ export function scheduleRoundCountdown({ salaId, roundId, duration = 20 }) { //
         // Ele fazia o timer se auto-bloquear.
         // --- FIM DA CORREÇÃO ---
 
-        // *** MODIFICADO PELO PASSO 4: `endRoundAndScore` agora retorna `roundDetails` ***
         const payload = await endRoundAndScore({ 
           salaId, 
           roundId, 
@@ -297,7 +303,6 @@ export function scheduleRoundCountdown({ salaId, roundId, duration = 20 }) { //
         }
         // --- FIM LÓGICA REVELAÇÃO ---
 
-        // *** O 'payload' agora contém 'roundDetails' ***
         io.to(salaId).emit('round:end', payload); // Emite o resultado NORMALMENTE
 
         const next = await getNextRoundForSala({ salaId, afterRoundId: roundId }); //
@@ -405,15 +410,44 @@ export function initSockets(httpServer) { //
   io.on('connection', (socket) => { //
     console.log('a user connected:', socket.id, 'jogador_id:', socket.data.jogador_id); //
 
-    socket.on('join-room', (salaId) => { //
+    // *** INÍCIO DA MODIFICAÇÃO 'join-room' ***
+    socket.on('join-room', async (salaId) => { // <-- TORNADO ASYNC
         salaId = String(salaId); // Garante que é string
         console.log(`Socket ${socket.id} (jogador ${socket.data.jogador_id}) joining room ${salaId}`);
         socket.join(salaId); //
-        // Guarda a sala no socket data para referência futura (ex: disconnect)
         socket.data.salaId = salaId; //
-        // Confirma que entrou (opcional)
         socket.emit('joined', { salaId }); //
+
+        try {
+            // 1. Busca os IDs dos jogadores na sala
+            const { data: jogadoresSala, error: jsError } = await supa
+                .from('jogador_sala')
+                .select('jogador_id')
+                .eq('sala_id', salaId);
+            if (jsError) throw jsError;
+
+            const jogadorIds = jogadoresSala.map(js => js.jogador_id);
+            if (jogadorIds.length === 0) {
+               io.to(salaId).emit('room:players_updated', { jogadores: [] }); 
+               return;
+            }
+
+            // 2. Busca os dados puros dos jogadores (SEM 'skin_equipada_id')
+            const { data: jogadoresData, error: jError } = await supa
+                .from('jogador')
+                .select('jogador_id, nome_de_usuario, avatar_nome') // <-- SIMPLIFICADO
+                .in('jogador_id', jogadorIds);
+            if (jError) throw jError;
+            
+            // 3. Emite para todos na sala
+            console.log(`[JOIN-ROOM] Emitindo players_updated para sala ${salaId}:`, jogadoresData);
+            io.to(salaId).emit('room:players_updated', { jogadores: jogadoresData || [] });
+
+        } catch (error) {
+            console.error(`[JOIN-ROOM] Erro ao buscar jogadores para sala ${salaId}:`, error);
+        }
     });
+    // *** FIM DA MODIFICAÇÃO 'join-room' ***
 
     socket.on('round:stop', async ({ salaId, roundId, by }) => { //
        try { //
@@ -423,15 +457,11 @@ export function initSockets(httpServer) { //
 
         if (!salaId || !roundId) { /* Não fazer nada se IDs inválidos */ return; } //
         
-        // Verifica se JÁ FOI PONTUADO antes de fazer qualquer coisa
         if (alreadyScored(salaId, roundId)) {
             console.warn(`[STOP] Rodada ${roundId} já foi pontuada. Buscando resultados existentes para mostrar placar.`);
-            // Busca os resultados já calculados e os envia
-            // *** MODIFICADO PELO PASSO 4: `getRoundResults` agora retorna `roundDetails` ***
             const payload = await getRoundResults({ salaId, roundId });
             io.to(salaId).emit('round:end', payload);
             
-            // Continua com a lógica de próxima rodada
             const next = await getNextRoundForSala({ salaId, afterRoundId: roundId });
             if (next) {
                 console.log(`[STOP->NEXT_ROUND] Aguardando 10 segundos antes de iniciar próxima rodada ${next.rodada_id} para sala ${salaId}`);
@@ -445,7 +475,6 @@ export function initSockets(httpServer) { //
                     await supa.from('rodada').update({ status: 'in_progress' }).eq('rodada_id', next.rodada_id);
                     const qTempo = await supa.from('rodada').select('tempo:tempo_id(valor)').eq('rodada_id', roundId).single();
                     const duration = qTempo.data?.tempo?.valor || 20;
-                    // Emite eventos múltiplas vezes para garantir que todos recebam
                     setTimeout(() => {
                       const timeLeft = getTimeLeftForSala(salaId, duration);
                       io.to(salaId).emit('round:ready', next);
@@ -459,28 +488,22 @@ export function initSockets(httpServer) { //
                     scheduleRoundCountdown({ salaId: salaId, roundId: next.rodada_id, duration: duration });
                 }, 10000);
             }
-            return; // Retorna aqui para não processar novamente
+            return; 
         }
 
         console.log(`[CLICK STOP] sala=${salaId} round=${roundId} by=${stoppedBy}`); //
         io.to(salaId).emit('round:stopping', { roundId, by: stoppedBy }); //
 
-        // Limpa o timer imediatamente para evitar que ele também tente pontuar
         clearTimerForSala(salaId); //
         await sleep(GRACE_MS); //
 
-        // Re-verifica se pontuou durante o sleep (caso MUITO raro de concorrência extrema)
          if (scoredRounds.has(`${salaId}-${roundId}`)) {
              console.warn(`[STOP] Rodada ${roundId} já foi pontuada durante GRACE_MS (concorrência?). Buscando resultados existentes.`);
-             // Busca os resultados já calculados e os envia mesmo assim
-             // *** MODIFICADO PELO PASSO 4: `getRoundResults` agora retorna `roundDetails` ***
              const payload = await getRoundResults({ salaId, roundId });
              io.to(salaId).emit('round:end', payload);
              
-             // Continua com a lógica de próxima rodada
              const next = await getNextRoundForSala({ salaId, afterRoundId: roundId });
              if (next) {
-                 // Aguarda 10 segundos antes de iniciar a próxima rodada
                  console.log(`[STOP->NEXT_ROUND] Aguardando 10 segundos antes de iniciar próxima rodada ${next.rodada_id} para sala ${salaId}`);
                  setTimeout(async () => {
                      const nextCheck = await getNextRoundForSala({ salaId, afterRoundId: roundId });
@@ -492,7 +515,6 @@ export function initSockets(httpServer) { //
                      await supa.from('rodada').update({ status: 'in_progress' }).eq('rodada_id', next.rodada_id);
                      const qTempo = await supa.from('rodada').select('tempo:tempo_id(valor)').eq('rodada_id', roundId).single();
                      const duration = qTempo.data?.tempo?.valor || 20;
-                     // Emite eventos múltiplas vezes para garantir que todos recebam
                      setTimeout(() => {
                        const timeLeft = getTimeLeftForSala(salaId, duration);
                        io.to(salaId).emit('round:ready', next);
@@ -506,10 +528,9 @@ export function initSockets(httpServer) { //
                      scheduleRoundCountdown({ salaId: salaId, roundId: next.rodada_id, duration: duration });
                  }, 10000);
              }
-             return; // Retorna aqui para não processar novamente
+             return; 
          }
 
-        // *** MODIFICADO PELO PASSO 4: `endRoundAndScore` agora retorna `roundDetails` ***
         const payload = await endRoundAndScore({ 
           salaId, 
           roundId, 
@@ -517,15 +538,11 @@ export function initSockets(httpServer) { //
           disregardedOpponentWordsSet: getDisregardedOpponentWords(salaId, roundId)
         }); //
 
-        // Limpa as palavras puladas após pontuar
         clearSkippedWords(salaId, roundId);
-        // Limpa as palavras desconsideradas do oponente após pontuar
         clearDisregardedOpponentWords(salaId, roundId);
 
-        // --- LÓGICA DE REVELAÇÃO (APÓS PONTUAÇÃO - igual ao timer) ---
          const revealRequesters = getAndClearRevealRequests(salaId, roundId); //
         if (revealRequesters.size > 0) { //
-            // ... (código de revelação igual ao do timer) ...
              const { data: respostasFinais, error: errRespostas } = await supa //
                 .from('participacao_rodada') //
                 .select('jogador_id, tema_nome, resposta') //
@@ -562,29 +579,22 @@ export function initSockets(httpServer) { //
                  }
              }
         }
-        // --- FIM LÓGICA REVELAÇÃO ---
 
-        // *** O 'payload' agora contém 'roundDetails' ***
         io.to(salaId).emit('round:end', payload); // Emite resultado NORMALMENTE
 
         const next = await getNextRoundForSala({ salaId, afterRoundId: roundId }); //
         if (next) { //
-            // Aguarda 10 segundos antes de iniciar a próxima rodada
             console.log(`[STOP->NEXT_ROUND] Aguardando 10 segundos antes de iniciar próxima rodada ${next.rodada_id} para sala ${salaId}`);
             setTimeout(async () => {
-                // Verifica se ainda existe próxima rodada (pode ter mudado durante o delay)
                 const nextCheck = await getNextRoundForSala({ salaId, afterRoundId: roundId });
                 if (!nextCheck || nextCheck.rodada_id !== next.rodada_id) {
                     console.log(`[STOP->NEXT_ROUND] Próxima rodada mudou durante o delay, abortando.`);
                     return;
                 }
-                // Código para iniciar a próxima rodada
                 console.log(`[STOP->NEXT_ROUND] Iniciando próxima rodada ${next.rodada_id} para sala ${salaId}`);
                 await supa.from('rodada').update({ status: 'in_progress' }).eq('rodada_id', next.rodada_id); //
-                // Precisa pegar a duração original da rodada anterior ou ter um padrão
                 const qTempo = await supa.from('rodada').select('tempo:tempo_id(valor)').eq('rodada_id', roundId).single(); //
                 const duration = qTempo.data?.tempo?.valor || 20; // Default 20s
-                // Emite eventos múltiplas vezes para garantir que todos recebam
                 setTimeout(() => {
                   const timeLeft = getTimeLeftForSala(salaId, duration);
                   io.to(salaId).emit('round:ready', next); //
@@ -601,7 +611,6 @@ export function initSockets(httpServer) { //
           // --- LÓGICA DE FIM DE PARTIDA E MOEDAS (STOP) ---
           const winnerInfo = computeWinner(payload.totais); //
           const todosJogadoresIds = Object.keys(payload.totais || {}).map(Number); //
-          // Adicionar Moedas
           for (const jId of todosJogadoresIds) {
               let moedasGanhas = MOEDAS_PARTICIPACAO; //
               if (winnerInfo?.empate && winnerInfo.jogadores.includes(jId)) { //
@@ -612,7 +621,6 @@ export function initSockets(httpServer) { //
               await adicionarMoedas(jId, moedasGanhas); //
           }
 
-          // ATUALIZA STATUS DA SALA PARA 'terminada'
           console.log(`[STOP->MATCH_END] Atualizando sala ${salaId} para 'terminada'`);
           const { error: updateSalaStopError } = await supa
             .from('sala') //
@@ -622,7 +630,6 @@ export function initSockets(httpServer) { //
                console.error(`[STOP] Erro ao atualizar status da sala ${salaId} para terminada:`, updateSalaStopError);
           }
 
-          // Salva ranking da partida
           try {
               await saveRanking({ salaId, totais: payload.totais, winnerInfo });
           } catch (rankingError) {
@@ -682,7 +689,6 @@ export function initSockets(httpServer) { //
               .update({ quantidade: novaQuantidade }) //
               .eq('jogador_power_up_id', itemInventario.jogador_power_up_id); // Usa a chave primária da tabela de inventário
           if (decrementError) { throw decrementError; } //
-          // Emite evento para o cliente atualizar o inventário visualmente
           socket.emit('inventory:updated'); //
           // --- Fim da verificação/decremento ---
 
@@ -690,6 +696,7 @@ export function initSockets(httpServer) { //
           console.log(`[powerup:use] Sucesso: Jogador ${usuarioJogadorId} usou ${efeito} na sala ${salaId}, rodada ${currentRoundId}`); //
 
           switch (efeito) { //
+            // ... (Todos os 'case' de power-ups - Sem Mudanças) ...
             case 'BLUR_OPPONENT_SCREEN_5S': //
             case 'JUMPSCARE': // Alias para o mesmo efeito
               // Emite para todos os outros na sala com duração de 3 segundos
@@ -904,11 +911,9 @@ export function initSockets(httpServer) { //
         }
     });
 
-    // *** INÍCIO DA MODIFICAÇÃO DO PASSO 5 ***
     socket.on('player:react', ({ salaId, emojiId }) => {
       const jogadorId = socket.data.jogador_id;
       
-      // Validação básica
       if (!salaId || !emojiId || !jogadorId) {
         console.warn(`[REACTION] Evento inválido:`, { salaId, emojiId, jogadorId });
         return;
@@ -916,45 +921,58 @@ export function initSockets(httpServer) { //
 
       console.log(`[REACTION] Jogador ${jogadorId} enviou '${emojiId}' para sala ${salaId}`);
 
-      // Emite para TODOS na sala (incluindo o remetente)
       io.to(salaId).emit('player:reacted', {
         fromPlayerId: jogadorId,
         emojiId: emojiId
       });
     });
-    // *** FIM DA MODIFICAÇÃO DO PASSO 5 ***
 
-    socket.on('disconnect', (reason) => { //
+
+    // *** INÍCIO DA MODIFICAÇÃO 'disconnect' ***
+    socket.on('disconnect', async (reason) => { // <-- TORNADO ASYNC
         console.log('user disconnected:', socket.id, 'jogador_id:', socket.data.jogador_id, 'reason:', reason); //
-        // Lógica para remover jogador da sala no disconnect (simplificado)
         const salaId = socket.data.salaId; //
         const jogadorId = socket.data.jogador_id; //
         if (salaId && jogadorId) {
            console.log(`[DISCONNECT] Removendo jogador ${jogadorId} da sala ${salaId} (se existir)...`);
-           supa.from('jogador_sala').delete().match({ sala_id: salaId, jogador_id: jogadorId })
-             .then(({ error }) => {
-                 if (error) {
-                     console.error(`[DISCONNECT] Erro ao remover jogador ${jogadorId} da sala ${salaId}:`, error);
-                 } else {
-                     console.log(`[DISCONNECT] Jogador ${jogadorId} removido da sala ${salaId} (ou já não estava).`);
-                     // Emitir atualização de jogadores para a sala
-                     const io = getIO();
-                     if (io) {
-                        supa.from('jogador_sala')
-                            .select('jogador:jogador_id(nome_de_usuario)')
-                            .eq('sala_id', salaId)
-                            .then(({ data: playersData, error: playersError }) => {
-                                if (!playersError) {
-                                    const playerNames = (playersData || []).map(p => p.jogador?.nome_de_usuario || 'Desconhecido');
-                                    console.log(`[DISCONNECT] Emitindo players_updated para sala ${salaId}:`, playerNames);
-                                    io.to(salaId).emit('room:players_updated', { jogadores: playerNames });
-                                }
-                            });
-                     }
-                 }
-             });
+           
+           const { error: deleteError } = await supa.from('jogador_sala').delete().match({ sala_id: salaId, jogador_id: jogadorId });
+           
+           if (deleteError) {
+               console.error(`[DISCONNECT] Erro ao remover jogador ${jogadorId} da sala ${salaId}:`, deleteError);
+           } else {
+               console.log(`[DISCONNECT] Jogador ${jogadorId} removido da sala ${salaId} (ou já não estava).`);
+           }
+
+           // Re-busca TODOS os jogadores restantes na sala
+           try {
+                const { data: jogadoresSala, error: jsError } = await supa
+                    .from('jogador_sala')
+                    .select('jogador_id')
+                    .eq('sala_id', salaId);
+                if (jsError) throw jsError;
+
+                const jogadorIds = jogadoresSala.map(js => js.jogador_id);
+                
+                let jogadoresData = [];
+                if (jogadorIds.length > 0) {
+                    const { data, error: jError } = await supa
+                        .from('jogador')
+                        .select('jogador_id, nome_de_usuario, avatar_nome') // <-- SIMPLIFICADO
+                        .in('jogador_id', jogadorIds);
+                    if (jError) throw jError;
+                    jogadoresData = data;
+                }
+                
+                console.log(`[DISCONNECT] Emitindo players_updated para sala ${salaId}:`, jogadoresData);
+                io.to(salaId).emit('room:players_updated', { jogadores: jogadoresData || [] });
+
+            } catch (error) {
+                console.error(`[DISCONNECT] Erro ao re-buscar jogadores para sala ${salaId}:`, error);
+            }
         }
     });
+    // *** FIM DA MODIFICAÇÃO 'disconnect' ***
 
   });
 
