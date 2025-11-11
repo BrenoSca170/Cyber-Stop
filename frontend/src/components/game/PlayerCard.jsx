@@ -5,9 +5,9 @@ import { avatarList } from '../../lib/avatarList';
 
 // Lógica do Avatar
 const getAvatarUrl = (avatarId) => {
-  if (!avatarId) return avatarList[0].src;
-  const avatar = avatarList.find(a => a.nome === avatarId); 
-  return avatar ? avatar.src : avatarList[0].src; 
+  if (!avatarId) return avatarList[0].src; //
+  const avatar = avatarList.find(a => a.nome === avatarId); //
+  return avatar ? avatar.src : avatarList[0].src; //
 };
 
 export default function PlayerCard({ 
@@ -17,18 +17,18 @@ export default function PlayerCard({
   aguardando = false 
 }) {
   
-  const avatarUrl = getAvatarUrl(player?.avatarId);
+  const avatarUrl = getAvatarUrl(player?.avatarId); //
 
   const variants = {
-    hidden: { x: isOpponent ? '100vw' : '-100vw', opacity: 0 },
-    visible: { x: 0, opacity: 1, transition: { type: 'spring', duration: 0.8 } },
-    exit: { x: isOpponent ? '100vw' : '-100vw', opacity: 0, transition: { duration: 0.3 } }
+    hidden: { x: isOpponent ? '100vw' : '-100vw', opacity: 0 }, //
+    visible: { x: 0, opacity: 1, transition: { type: 'spring', duration: 0.8 } }, //
+    exit: { x: isOpponent ? '100vw' : '-100vw', opacity: 0, transition: { duration: 0.3 } } //
   };
 
   // Define as cores Neon com base no oponente
-  const glowColor = isOpponent ? 'shadow-red-500/30' : 'shadow-cyan-500/30';
-  const borderColor = isOpponent ? 'border-red-500' : 'border-cyan-400';
-  const textColor = isOpponent ? 'text-red-400' : 'text-cyan-400';
+  const glowColor = isOpponent ? 'shadow-red-500/30' : 'shadow-cyan-500/30'; //
+  const borderColor = isOpponent ? 'border-red-500' : 'border-cyan-400'; //
+  const textColor = isOpponent ? 'text-red-400' : 'text-cyan-400'; //
 
   // --- Renderização condicional (Aguardando vs. Conectado) ---
   
@@ -47,7 +47,7 @@ export default function PlayerCard({
     // Jogador Conectado
     return (
       <div className="flex flex-col items-center justify-between h-full p-6">
-        {/* 1. Título (PLAYER 01) - Fica fora do padding central */}
+        {/* 1. Título (PLAYER 01) - ISSO COMBINA COM A IMAGEM */}
         <h2 className={`text-2xl font-bold font-cyber ${textColor}`}>
           {playerTitle}
         </h2>
@@ -56,9 +56,9 @@ export default function PlayerCard({
         <motion.img 
           src={avatarUrl} 
           alt="Avatar" 
-          className="w-48 h-48 rounded-full border-4 border-gray-700 shadow-lg object-cover"
+          className="w-48 h-48 rounded-full border-4 border-gray-700 shadow-lg object-cover" //
           initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1, transition: { delay: 0.5 } }}
+          animate={{ opacity: 1, scale: 1, transition: { delay: 0.5 } }} //
         />
         
         {/* 3. Informações (Nome, Rank, Status) */}
@@ -79,14 +79,14 @@ export default function PlayerCard({
 
   return (
     <motion.div
-      className={`w-80 h-[28rem] bg-gray-950 border-2 ${aguardando ? 'border-dashed border-gray-700' : borderColor} rounded-lg shadow-lg ${glowColor}`}
+      className={`w-80 h-[28rem] bg-gray-950 border-2 ${aguardando ? 'border-dashed border-gray-700' : borderColor} rounded-lg shadow-lg ${glowColor}`} //
       variants={variants}
       initial="hidden"
       animate="visible"
       exit="exit"
       // Recriando o efeito "augmented-ui" da imagem
       style={{
-        clipPath: 'polygon(0 10%, 10% 0, 100% 0, 100% 90%, 90% 100%, 0 100%)'
+        clipPath: 'polygon(0 10%, 10% 0, 100% 0, 100% 90%, 90% 100%, 0 100%)' //
       }}
     >
       {renderCardContent()}
