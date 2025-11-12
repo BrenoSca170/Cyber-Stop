@@ -102,27 +102,28 @@ async function getRodadasFromSala(salaId) {
   const { data, error } = await supa
     .from('rodada')
     .select('rodada_id, numero_da_rodada')
-    .eq('sala_id', salaId)
-    .order('numero_da_rodada', { ascending: true })
-  if (error) throw error
-  return data || []
+    .eq('sala_id', Number(salaId))
+    .order('numero_da_rodada', { ascending: true });
+  if (error) throw error;
+  return data || [];
 }
 
 export async function getNextRoundForSala({ salaId, afterRoundId }) {
-  const rounds = await getRodadasFromSala(salaId)
-  if (!rounds.length) return null
+  const rounds = await getRodadasFromSala(salaId);
+  if (!rounds.length) return null;
 
-  const idx = rounds.findIndex(r => r.rodada_id === afterRoundId)
+  const afterIdNum = Number(afterRoundId);
+  const idx = rounds.findIndex(r => Number(r.rodada_id) === afterIdNum);
+
   if (idx === -1) {
-    // caso não encontre, retorna a primeira
-    return await buildRoundPayload(rounds[0].rodada_id)
+    // ❌ NUNCA volte para a primeira; sinalize “acabou” para evitar loop
+    return null;
   }
 
-  const proxima = rounds[idx + 1]
-  if (!proxima) return null // 🚨 fim das rodadas
+  const proxima = rounds[idx + 1];
+  if (!proxima) return null; // ✅ fim das rodadas
 
-  // carrega payload completo
-  return await buildRoundPayload(proxima.rodada_id)
+  return await buildRoundPayload(proxima.rodada_id);
 }
 
 /* =========================

@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import api from '../lib/api'
 import { useNavigate } from 'react-router-dom'
 import FaultyTerminalR3F from '../components/FaultyTerminalR3F'
+import { refreshSocketAuth } from '../lib/socket';
 
 export default function Login() {
   const [isLogin, setIsLogin] = useState(true)
@@ -17,6 +18,7 @@ export default function Login() {
   useEffect(() => {
     const token = localStorage.getItem('token')
     if (token) {
+      refreshSocketAuth()
       nav('/', { replace: true })
     }
   }, [nav])
@@ -35,11 +37,13 @@ export default function Login() {
         const { data } = await api.post('/auth/login', { email, password })
         localStorage.setItem('token', data.token)
         localStorage.setItem('meuJogadorId', String(data.jogador.jogador_id))
+        refreshSocketAuth()
         nav('/')
       } else {
         const { data } = await api.post('/auth/register', { email, password, nome_de_usuario: username })
         localStorage.setItem('token', data.token)
         localStorage.setItem('meuJogadorId', String(data.jogador.jogador_id))
+        refreshSocketAuth()
         nav('/')
       }
     } catch (e) {

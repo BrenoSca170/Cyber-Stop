@@ -153,6 +153,25 @@ router.post('/join', requireAuth, async (req, res) => {
   }
 });
 
+// --- LISTAR SALAS DISPONÍVEIS ---
+router.get('/available', requireAuth, async (req, res) => {
+  try {
+    const { data, error } = await supa
+      .from('sala')
+      .select('sala_id, nome_sala, status, data_hora_criacao')
+      .eq('status', 'waiting')
+      .order('data_hora_criacao', { ascending: false })
+      .limit(50);
+
+    if (error) throw error;
+    res.json(data || []);
+  } catch (e) {
+    console.error('[GET /rooms/available] erro:', e);
+    res.status(500).json({ error: e.message || 'Erro ao listar salas' });
+  }
+});
+
+
 // --- NOVA ROTA: Sair da sala ---
 router.post('/:salaId/leave', requireAuth, async (req, res) => {
    try {
@@ -223,9 +242,12 @@ router.post('/:salaId/leave', requireAuth, async (req, res) => {
 
 // --- ROTA EXISTENTE: Obter detalhes da sala ---
 router.get('/:salaId', requireAuth, async (req, res) => {
-    try {
-        // --- CORREÇÃO DE TIPO DE DADO ---
-        const salaId = Number(req.params.salaId); // Converte para Number
+     try {
+        const { salaId: salaIdParam } = req.params;
+        if (!/^\d+$/.test(salaIdParam)) {
+          return res.status(400).json({ error: 'ID da sala inválido.' });
+        }
+        const salaId = Number(salaIdParam);
         // -------------------------
         const current_jogador_id = req.user.jogador_id;
 
