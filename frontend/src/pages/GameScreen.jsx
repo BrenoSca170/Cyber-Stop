@@ -7,6 +7,7 @@ import { useEffect } from 'react'; // <-- IMPORTAR useEffect
 import { useGameSocket } from '../hooks/useGameSocket';
 import { useGameInput } from '../hooks/useGameInput';
 import { usePowerUps } from '../hooks/usePowerUps';
+import { useExitConfirmation } from '../hooks/useExitConfirmation';
 import socket from '../lib/socket';
 
 // Nossos novos Componentes de UI
@@ -15,6 +16,8 @@ import MatchEndScreen from '../components/game/MatchEndScreen';
 import WaitingForRound from '../components/game/WaitingForRound';
 import ActiveRound from '../components/game/ActiveRound';
 import RoundEndScreen from '../components/game/RoundEndScreen';
+import ExitConfirmationModal from '../components/ExitConfirmationModal';
+import NavigationBlocker from '../components/NavigationBlocker';
 
 import MatrixRain from '../components/MatrixRain';
 import FaultyTerminalR3F from '../components/FaultyTerminalR3F';
@@ -40,6 +43,18 @@ export default function GameScreen() {
   // Desestrutura o estado para passar para os outros hooks
   const { rodadaId, isLocked, finalizado, totais, vencedor, roundResults } = gameState;
   const { activeSkipPowerUpId, setActiveSkipPowerUpId, activeSkipOpponentPowerUpId, setActiveSkipOpponentPowerUpId } = effectsState;
+
+  // Hook de confirmação de saída - partida começou se há rodadaId (mesmo que aguardando primeira rodada, já está na tela de jogo)
+  const matchStarted = true; // Se está na GameScreen, a partida já começou
+  const { 
+    showModal, 
+    confirmExit, 
+    cancelExit, 
+    handleExitClick,
+    isInRoomOrMatch,
+    exitConfirmed,
+    exitCancelled
+  } = useExitConfirmation(salaId, matchStarted);
 
   // 2. Hook de Input: Passa o gameState para ele
   const { 
@@ -132,6 +147,24 @@ export default function GameScreen() {
   // --- RENDERIZAÇÃO (Mesma de antes) ---
   return (
     <>
+      {/* Bloqueador de navegação */}
+      <NavigationBlocker 
+        shouldBlock={isInRoomOrMatch}
+        exitConfirmed={exitConfirmed}
+        exitCancelled={exitCancelled}
+        showModal={showModal}
+        onBlock={(proceed, reset) => {
+          handleExitClick(proceed, reset);
+        }}
+      />
+      
+      {/* Modal de confirmação de saída */}
+      <ExitConfirmationModal 
+        isOpen={showModal}
+        onConfirm={confirmExit}
+        onCancel={cancelExit}
+      />
+      
       {/* <MatrixRain
         color="#ff0000ff"
         fontSize={12}

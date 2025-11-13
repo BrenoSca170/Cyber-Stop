@@ -6,6 +6,9 @@ import { ArrowLeft, Loader2, Play, ClipboardCopy, Users } from 'lucide-react';
 import LetterGlitch from '../components/LetterGlitch';
 import PixelBlast from '../components/PixelBlast';
 import Hyperspeed from '../components/Hyperspeed';
+import { useExitConfirmation } from '../hooks/useExitConfirmation';
+import ExitConfirmationModal from '../components/ExitConfirmationModal';
+import NavigationBlocker from '../components/NavigationBlocker';
 
 function WaitingRoomScreen() {
     const { salaId } = useParams(); 
@@ -14,7 +17,21 @@ function WaitingRoomScreen() {
     const [loading, setLoading] = useState(true); 
     const [error, setError] = useState(''); 
     const [copySuccess, setCopySuccess] = useState(''); 
-    const [leaving, setLeaving] = useState(false); 
+    const [leaving, setLeaving] = useState(false);
+
+    // Hook de confirmação de saída
+    const { 
+        showModal, 
+        confirmExit, 
+        cancelExit, 
+        handleExitClick,
+        isInRoomOrMatch,
+        exitConfirmed,
+        exitCancelled
+    } = useExitConfirmation(salaId, false, () => {
+        // Callback quando a saída é confirmada
+        setLeaving(false);
+    }); 
 
     // ... (Todas as funções: copyToClipboard, handleStartGame, handleLeaveRoom) ...
     // ... (Toda a lógica dentro do useEffect) ...
@@ -43,18 +60,14 @@ function WaitingRoomScreen() {
             setLoading(false); 
         }
     };
-    const handleLeaveRoom = async () => { 
-      setLeaving(true);
-      setError('');
-      try {
-          await api.post(`/rooms/${salaId}/leave`); 
+    const handleLeaveRoom = () => { 
+      // Apenas intercepta a saída - a API será chamada pelo confirmExit
+      handleExitClick(() => {
+          setLeaving(true);
+          setError('');
+          // A navegação será feita após a confirmação e chamada da API
           navigate('/'); 
-      } catch (error) {
-          console.error("Erro ao sair da sala:", error);
-          setError(error.response?.data?.error || error.message || 'Falha ao sair da sala.');
-          setTimeout(() => setError(''), 3000);
-          setLeaving(false); 
-      }
+      });
     };
     useEffect(() => { 
         let isMounted = true; 
@@ -188,6 +201,24 @@ function WaitingRoomScreen() {
 
     return ( 
         <div className="relative flex flex-col items-center justify-center min-h-[calc(100vh-120px)] text-white p-4 font-cyber [perspective:1000px]">
+            {/* Bloqueador de navegação */}
+            <NavigationBlocker 
+                shouldBlock={isInRoomOrMatch}
+                exitConfirmed={exitConfirmed}
+                exitCancelled={exitCancelled}
+                showModal={showModal}
+                onBlock={(proceed, reset) => {
+                    handleExitClick(proceed, reset);
+                }}
+            />
+            
+            {/* Modal de confirmação de saída */}
+            <ExitConfirmationModal 
+                isOpen={showModal}
+                onConfirm={confirmExit}
+                onCancel={cancelExit}
+            />
+            
             <PixelBlast className="relative inset-0 w-full h-full z-0" />
             <div className="absolute z-10 w-full max-w-2xl mx-auto">
                 {/* Botão Sair */}
