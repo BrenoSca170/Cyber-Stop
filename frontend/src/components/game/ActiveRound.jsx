@@ -3,6 +3,8 @@ import CategoryRow from '../CategoryRow';
 import { Zap, Loader2, Star, SkipForward, Eye, Ghost } from 'lucide-react';
 import PowerUpRadialMenu from './PowerUpRadialMenu'; // <-- 1. Importa o novo componente
 
+import MatrixRain from '../MatrixRain';
+
 export default function ActiveRound({
   salaId,
   meuJogadorId,
@@ -72,6 +74,7 @@ export default function ActiveRound({
   return (
     // Aplicada fonte cyber e perspectiva
     <div className="max-w-3xl mx-auto text-white space-y-4 p-4 relative font-cyber [perspective:1000px]">
+      
       
       {/* Cabeçalho com Timer e ID (com augmented-ui) */}
       <header 

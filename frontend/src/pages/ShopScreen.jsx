@@ -5,6 +5,9 @@ import api from '../lib/api';
 import { ArrowLeft, Loader2, ShoppingCart, Gem, Package, Info } from 'lucide-react';
 // (NOVO) Importa o PaymentModal
 import PaymentModal from '../components/PaymentModal';
+import MatrixRain from '../components/MatrixRain';
+import GlitchText from '../components/GlitchText';
+
 
 // Um componente interno para o Cartão do Item (Power-up)
 function StoreItemCard({ item, onBuy, isBuying }) {
@@ -19,13 +22,14 @@ function StoreItemCard({ item, onBuy, isBuying }) {
 
   return (
     <div 
-      className="bg-bg-secondary p-4 border border-primary/50 rounded-lg shadow-lg
-                 flex flex-col justify-between transition-all"
-      data-augmented-ui="tl-clip tr-clip br-clip bl-clip border"
+      className="bg-purple-900/80 p-4 border border-primary/50 rounded-lg shadow-lg
+                 flex flex-col justify-between transition-all hover:scale-[1.02] cursor-target"
+      data-augmented-ui="tl-clip tr-2-clip-x br-clip bl-2-clip-x border"
     >
+      
       <div>
         <h3 className="text-xl font-bold text-accent mb-2">{item.nome}</h3>
-        <p className="text-sm text-text-muted mb-3">{item.descricao}</p>
+        <p className="text-sm text-white text-text-muted mb-3">{item.descricao}</p>
       </div>
       <div className="flex justify-between items-center mt-4">
         <span className="text-lg font-semibold text-warning flex items-center gap-1">
@@ -34,9 +38,9 @@ function StoreItemCard({ item, onBuy, isBuying }) {
         <button
           onClick={handleClick}
           disabled={isBuying}
-          className={`px-4 py-2 font-semibold text-black bg-primary rounded
-                      hover:bg-primary/80 transition-all duration-150
-                      disabled:bg-gray-500 disabled:cursor-not-allowed
+          className={`px-4 py-2 font-semibold text-black bg-amber-500 rounded
+                      hover:bg-primary transition-all duration-150 cursor-target
+                      disabled:bg-white disabled:cursor-not-allowed
                       flex items-center gap-2
                       ${isClicked ? 'scale-95' : ''}`}
         >
@@ -61,9 +65,9 @@ function PackageCard({ pkg, onBuy, isBuying }) {
 
   return (
     <div 
-      className="bg-bg-secondary p-4 border border-secondary/50 rounded-lg shadow-lg
+      className="bg-bg-secondary p-4 border border-secondary/50 rounded-lg shadow-lg cursor-target
                  flex flex-col justify-between transition-all"
-      data-augmented-ui="tl-clip tr-clip br-clip bl-clip border"
+      data-augmented-ui="tl-clip tr-2-clip-x br-clip bl-2-clip-x border"
     >
       <div>
         <h3 className="text-xl font-bold text-secondary mb-2">{pkg.nome}</h3>
@@ -80,7 +84,7 @@ function PackageCard({ pkg, onBuy, isBuying }) {
           onClick={handleClick}
           disabled={isBuying}
           className={`px-4 py-2 font-semibold text-black bg-secondary rounded
-                      hover:bg-secondary/80 transition-all duration-150
+                      hover:bg-secondary/80 transition-all duration-150 cursor-target
                       disabled:bg-gray-500 disabled:cursor-not-allowed
                       flex items-center gap-2
                       ${isClicked ? 'scale-95' : ''}`}
@@ -222,8 +226,13 @@ export default function ShopScreen() {
 
   return (
     <div className="relative flex flex-col min-h-[calc(100vh-120px)] text-white p-4 font-cyber">
+      <MatrixRain
+        color="#ff00ffff"
+        fontSize={12}
+        className="fixed inset-0 z-0 rounded-lg"
+      />
       {/* Cabeçalho e Botão Voltar */}
-      <header className="flex items-center justify-between mb-6 px-2">
+      <header className="flex items-center justify-between mb-6 px-2 z-10">
         <button
           onClick={() => navigate('/lobby')}
           className="text-text-muted hover:text-primary transition-colors flex items-center gap-1 text-sm cursor-target"
@@ -233,9 +242,10 @@ export default function ShopScreen() {
           Voltar
         </button>
 
-        <h1 className="text-3xl md:text-4xl font-bold text-center text-accent">
+        <GlitchText text="Loja" fontSize={5} color="rgba(115, 255, 0, 1)" fontWeight="normal" textAlign="center" font="/src/assets/fonts/Dena.otf" />
+        {/* <h1 className="text-3xl md:text-4xl font-bold text-center text-accent z-10">
           LOJA
-        </h1>
+        </h1> */}
 
         {/* Saldo de Moedas */}
         <div className="bg-bg-secondary border border-warning/50 rounded px-4 py-2 flex items-center gap-2">
@@ -245,17 +255,17 @@ export default function ShopScreen() {
       </header>
 
       {/* Abas de Navegação */}
-      <nav className="flex justify-center gap-4 mb-6">
+      <nav className="flex justify-center gap-4 mb-6 z-10">
         <button
           onClick={() => setTab('items')}
-          className={`px-6 py-2 text-lg font-semibold rounded-t-lg transition-colors
+          className={`px-6 py-2 text-lg font-semibold rounded-t-lg transition-colors cursor-target
                       ${tab === 'items' ? 'bg-primary text-black' : 'bg-bg-secondary text-primary/70 hover:bg-bg-input'}`}
         >
           Itens (Power-ups)
         </button>
         <button
           onClick={() => setTab('packages')}
-          className={`px-6 py-2 text-lg font-semibold rounded-t-lg transition-colors
+          className={`px-6 py-2 text-lg font-semibold rounded-t-lg transition-colors cursor-target
                       ${tab === 'packages' ? 'bg-secondary text-black' : 'bg-bg-input text-secondary/70 hover:bg-bg-input'}`}
         >
           Pacotes (Moedas)

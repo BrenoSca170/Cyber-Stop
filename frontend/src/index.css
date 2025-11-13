@@ -1,6 +1,26 @@
 /* 1. Importar a biblioteca augmented-ui */
 @import "augmented-ui/augmented-ui.min.css";
 
+@font-face { 
+  font-family: Albatross;
+  src: url('./assets/fonts/Albatross.otf');
+}
+
+@font-face { 
+  font-family: Klory;
+  src: url('./assets/fonts/KLORY.otf');
+}
+
+@font-face { 
+  font-family: PunkCyber;
+  src: url('./assets/fonts/PunkCyber.ttf');
+}
+
+@font-face { 
+  font-family: Dena;
+  src: url('./assets/fonts/Dena.otf');
+}
+
 /* 2. Importar as camadas do Tailwind */
 @tailwind base;
 @tailwind components;
@@ -26,7 +46,7 @@
     --color-bg-primary: 10 10 26;    /* #0a0a1a */
     --color-bg-secondary: 26 26 46;  /* #1a1a2e */
     --color-bg-input: 15 15 32;      /* #0f0f20 */
-
+ 
     --color-border: var(--color-secondary);
     --color-border-accent: var(--color-primary);
 

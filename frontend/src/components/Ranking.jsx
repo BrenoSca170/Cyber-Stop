@@ -86,7 +86,7 @@ export default function Ranking({ salaId = null, limit = 10, autoRefresh = false
   return (
     <div className="w-full max-w-2xl mx-auto text-white font-cyber">
       <div className="mb-4 text-center">
-        <h2 className="text-2xl font-bold text-text-header mb-2">
+        <h2 className="text-2xl font-bold text-text-header mb-2 z-10">
           {isGlobal ? '🏆 Ranking Global' : '📊 Ranking da Sala'}
         </h2>
         {!isGlobal && salaId && (

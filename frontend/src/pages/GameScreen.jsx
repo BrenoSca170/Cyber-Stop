@@ -16,6 +16,10 @@ import WaitingForRound from '../components/game/WaitingForRound';
 import ActiveRound from '../components/game/ActiveRound';
 import RoundEndScreen from '../components/game/RoundEndScreen';
 
+import MatrixRain from '../components/MatrixRain';
+import FaultyTerminalR3F from '../components/FaultyTerminalR3F';
+import PixelBlast from '../components/PixelBlast';
+
 export default function GameScreen() {
   const { salaId } = useParams();
   const meuJogadorId = Number(
@@ -128,6 +132,19 @@ export default function GameScreen() {
   // --- RENDERIZAÇÃO (Mesma de antes) ---
   return (
     <>
+      {/* <MatrixRain
+        color="#ff0000ff"
+        fontSize={12}
+        className="fixed inset-0 z-0"
+      /> */}
+      <div className="absolute inset-0 w-full h-full z-0 pointer-events-none opacity-70">
+        <PixelBlast
+          
+          density={0.5}
+          speed={0.9}
+          className="w-full h-full" 
+        />
+      </div>
       {/* 1. Overlay de Jumpscare */}
       <AnimatePresence>
         {effectsState.showJumpscare && (

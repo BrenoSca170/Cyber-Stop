@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, RefreshCw, Globe, Users } from 'lucide-react'
 import Ranking from '../components/Ranking'
+import MatrixRain from '../components/MatrixRain'
 
 export default function RankingScreen() {
   const navigate = useNavigate()
@@ -12,7 +13,12 @@ export default function RankingScreen() {
 
   return (
     <div className="min-h-screen bg-bg-primary text-white p-6 font-cyber">
-      <div className="max-w-4xl mx-auto">
+      <MatrixRain 
+        color="#00FF00" 
+        fontSize={16}
+        className="fixed inset-0 z-0"
+      />
+      <div className="max-w-4xl mx-auto z-10 relative">
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
           <button
@@ -73,12 +79,14 @@ export default function RankingScreen() {
             </button>
           </div>
         </div>
+          
 
         {/* Ranking Component */}
         <Ranking 
           salaId={showGlobal ? null : salaId} 
           limit={10}
           autoRefresh={autoRefresh}
+          
         />
       </div>
     </div>

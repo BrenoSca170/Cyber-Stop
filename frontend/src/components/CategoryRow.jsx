@@ -5,7 +5,7 @@ function CategoryRow({ categoryName, value, onChange, isDisabled, inputClassName
   return (
     <div className="mb-4 flex w-full items-center gap-2 md:gap-4">
       {/* Label com fonte cyber e cor do tema */}
-      <label className="w-1/4 text-right text-base md:text-xl font-semibold text-text-muted uppercase">
+      <label className="w-1/4 text-right text-base md:text-xl font-semibold text-text-muted text-white uppercase">
         {categoryName}:
       </label>
       {/* Input com cores e foco do tema */}
