@@ -90,9 +90,9 @@ router.get('/store-packages', requireAuth, async (req, res) => {
 });
 
 
-// ROTA 4: Comprar um Item (Power-up)
+// ROTA 4: Comprar um Item (Power-up ou Moedas)
 router.post('/buy-item', requireAuth, async (req, res) => {
-    const { item_id } = req.body;
+    const { item_id, qtde = 1 } = req.body; // qtde padrão é 1 para power-ups
     const jogadorId = req.jogadorId;
 
     if (!item_id) {
@@ -103,7 +103,7 @@ router.post('/buy-item', requireAuth, async (req, res) => {
         // 1. Busca o preço do item em moedas
         const { data: itemData, error: itemError } = await supa
             .from('item')
-            .select('preco') // 'preco' é a coluna de quanto custa em moedas
+            .select('preco, tipo') // 'preco' é a coluna de quanto custa em moedas
             .eq('item_id', item_id)
             .single();
 
@@ -111,11 +111,13 @@ router.post('/buy-item', requireAuth, async (req, res) => {
         const precoDoItem = itemData.preco;
 
         // 2. Chama a procedure que faz a transação atômica
-        // (prc_realizar_compra_item que você criou no Passo 2.1)
+        // (prc_realizar_compra_item que você criou)
+        // Nota: Para moedas (tipo MOEDA), a qtde representa quantas moedas serão adquiridas
         const { error: rpcError } = await supa.rpc('prc_realizar_compra_item', {
             p_jogador_id: jogadorId,
             p_item_id_a_comprar: item_id,
-            p_preco_em_moedas: precoDoItem
+            p_preco_em_moedas: precoDoItem,
+            p_qtde: qtde
         });
 
         if (rpcError) throw rpcError;
@@ -132,14 +134,19 @@ router.post('/buy-item', requireAuth, async (req, res) => {
     }
 });
 
-// ROTA 5: Comprar um Pacote de Moedas (Inicia a transação)
-// (Aqui é onde você integraria um PagSeguro, Stripe, etc.)
+// ROTA 5: Comprar um Pacote de Moedas
+// Nota: Para produção, você integraria um gateway de pagamento (PagSeguro, Stripe, etc.)
+// Por enquanto, a compra é processada imediatamente e as moedas são adicionadas ao inventário
 router.post('/buy-package', requireAuth, async (req, res) => {
     const { pacote_id } = req.body;
     const jogadorId = req.jogadorId;
 
+    if (!pacote_id) {
+        return res.status(400).json({ error: 'pacote_id é obrigatório' });
+    }
+
     try {
-         // 1. Busca os dados do pacote
+        // 1. Busca os dados do pacote
         const { data: pacote, error: pkgError } = await supa
             .from('pacote')
             .select('qtde_moedas, preco')
@@ -148,8 +155,7 @@ router.post('/buy-package', requireAuth, async (req, res) => {
 
         if (pkgError || !pacote) throw new Error('Pacote não encontrado.');
 
-        // 2. Registra a compra com status 'PENDENTE'
-        // (Em um cenário real, você geraria um ID de pagamento aqui)
+        // 2. Registra a compra com status 'CONCLUÍDO'
         const { data: compra, error: compraError } = await supa
             .from('compra_pacote')
             .insert({
@@ -157,23 +163,48 @@ router.post('/buy-package', requireAuth, async (req, res) => {
                 pacote_id: pacote_id,
                 qtde_moedas: pacote.qtde_moedas,
                 preco: pacote.preco,
-                status: 'PENDENTE' // Status inicial
+                status: 'CONCLUÍDO' // Status concluído
             })
             .select('compra_pacote_id')
             .single();
 
         if (compraError) throw compraError;
 
-        // 3. Retorna os dados para o frontend iniciar o pagamento
-        res.status(201).json({ 
-            message: 'Pedido de compra criado. Aguardando pagamento.',
+        // 3. Adiciona as moedas ao inventário do jogador (item_id: 11)
+        const saldoAtual = await supa
+            .from('inventario')
+            .select('qtde')
+            .eq('jogador_id', jogadorId)
+            .eq('item_id', 11)
+            .single();
+
+        const qtdeAtual = saldoAtual.data?.qtde || 0;
+        const novoSaldo = qtdeAtual + pacote.qtde_moedas;
+
+        const { error: inventarioError } = await supa
+            .from('inventario')
+            .upsert({
+                jogador_id: jogadorId,
+                item_id: 11, // item_id da MOEDA
+                qtde: novoSaldo,
+                data_hora_ultima_atualizacao: new Date().toISOString()
+            }, {
+                onConflict: 'jogador_id,item_id'
+            });
+
+        if (inventarioError) throw inventarioError;
+
+        // 4. Retorna sucesso com o novo saldo
+        res.status(201).json({
+            message: 'Pacote de moedas adquirido com sucesso!',
             compra_pacote_id: compra.compra_pacote_id,
-            // Aqui você retornaria o link de pagamento do gateway
+            qtde_moedas_adicionadas: pacote.qtde_moedas,
+            novo_saldo_moedas: novoSaldo
         });
-        
+
     } catch (error) {
-         console.error('Erro ao iniciar compra de pacote:', error.message);
-         res.status(500).json({ error: error.message });
+        console.error('Erro ao comprar pacote:', error.message);
+        res.status(500).json({ error: error.message });
     }
 });
 

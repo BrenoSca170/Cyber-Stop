@@ -155,32 +155,44 @@ function alreadyScored(salaId, roundId) {
 }
 
 // Função para adicionar moedas a um jogador
+// Moedas são armazenadas na tabela 'inventario' com item_id: 11 (item MOEDA)
 async function adicionarMoedas(jogadorId, quantidade) {
-    if (!jogadorId || quantidade <= 0) return; //
+    if (!jogadorId || quantidade <= 0) return;
     try {
       console.log(`[MOEDAS] Adicionando ${quantidade} moedas para jogador ${jogadorId}...`);
-      // Usando rpc para chamar uma função SQL 'adicionar_moedas' (mais seguro contra race conditions)
-      // Você precisará criar essa função no Supabase SQL Editor:
-      /*
-      CREATE OR REPLACE FUNCTION adicionar_moedas(jogador_id_param int, quantidade_param int)
-      RETURNS void AS $$
-      BEGIN
-        UPDATE public.jogador
-        SET moedas = COALESCE(moedas, 0) + quantidade_param
-        WHERE jogador_id = jogador_id_param;
-      END;
-      $$ LANGUAGE plpgsql;
-      */
-      const { error } = await supa.rpc('adicionar_moedas', {
-          jogador_id_param: jogadorId,
-          quantidade_param: quantidade
-      });
-      if (error) throw error;
-      console.log(`[MOEDAS] ${quantidade} moedas adicionadas para jogador ${jogadorId}.`);
 
-      // Opcional: Notificar o jogador sobre o ganho de moedas via socket?
+      // Primeiro, tenta buscar o saldo atual de moedas
+      const { data: inventarioAtual, error: selectError } = await supa
+        .from('inventario')
+        .select('qtde')
+        .eq('jogador_id', jogadorId)
+        .eq('item_id', 11)
+        .single();
+
+      if (selectError && selectError.code !== 'PGRST116') throw selectError; // PGRST116 = não encontrado
+
+      // Calcula o novo saldo (se não existe, começa com 0)
+      const saldoAtual = inventarioAtual?.qtde || 0;
+      const novoSaldo = saldoAtual + quantidade;
+
+      // Agora faz o upsert com o novo saldo
+      const { error: upsertError } = await supa
+        .from('inventario')
+        .upsert({
+          jogador_id: jogadorId,
+          item_id: 11, // item_id da MOEDA
+          qtde: novoSaldo,
+          data_hora_ultima_atualizacao: new Date().toISOString()
+        }, {
+          onConflict: 'jogador_id,item_id'
+        });
+
+      if (upsertError) throw upsertError;
+      console.log(`[MOEDAS] ${quantidade} moedas adicionadas para jogador ${jogadorId}. Novo saldo: ${novoSaldo}`);
+
+      // Opcional: Notificar o jogador sobre o ganho de moedas via socket
       // const socketId = await getSocketIdByPlayerId(jogadorId);
-      // if (socketId) io.to(socketId).emit('player:coins_updated', { /* novo saldo? */ });
+      // if (socketId) io.to(socketId).emit('player:coins_updated', { novo_saldo: novoSaldo });
 
     } catch(e) {
         console.error(`[MOEDAS] Erro ao adicionar ${quantidade} moedas para jogador ${jogadorId}:`, e.message);

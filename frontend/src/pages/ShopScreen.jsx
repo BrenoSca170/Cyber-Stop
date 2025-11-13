@@ -274,14 +274,14 @@ export default function ShopScreen() {
 
       {/* Mensagem de Erro Global */}
       {error && (
-        <div className="bg-red-900 border border-red-500 text-red-200 p-3 rounded-lg text-center mb-4">
+        <div className="bg-red-900 border border-red-500 text-red-200 p-3 rounded-lg text-center mb-4 z-10">
           {error}
         </div>
       )}
 
       {/* Conteúdo da Loja */}
       {loading ? (
-        <div className="flex justify-center items-center py-20">
+        <div className="flex justify-center items-center py-20 z-10">
           <Loader2 size={40} className="animate-spin text-primary" />
         </div>
       ) : (
