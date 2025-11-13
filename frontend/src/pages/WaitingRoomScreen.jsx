@@ -194,7 +194,7 @@ function WaitingRoomScreen() {
                 <button
                     onClick={handleLeaveRoom} 
                     disabled={leaving} 
-                    className="absolute top-4 left-4 md:top-6 md:left-6 text-text-muted hover:text-primary transition-colors flex items-center gap-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed" 
+                    className="absolute top-4 left-4 md:top-6 md:left-6 text-text-muted hover:text-primary transition-colors cursor-target flex items-center gap-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed" 
                     title="Sair da sala" 
                 >
                     {leaving ? <Loader2 size={16} className="animate-spin" /> : <ArrowLeft size={16} />} 
@@ -211,7 +211,7 @@ function WaitingRoomScreen() {
                         <span className="text-2xl font-mono text-warning bg-black/50 px-3 py-1 rounded border border-dashed border-warning/50"> 
                             {salaId} 
                         </span>
-                        <button onClick={copyToClipboard} title="Copiar ID" className="text-text-muted hover:text-warning transition-colors p-1"> 
+                        <button onClick={copyToClipboard} title="Copiar ID" className="text-text-muted hover:text-warning transition-colors cursor-target p-1"> 
                             <ClipboardCopy size={20}/> 
                         </button>
                     </div>
@@ -265,7 +265,7 @@ function WaitingRoomScreen() {
                                 disabled={loading || sala.jogadores?.length < 2} 
                                 className="px-8 py-3 md:px-10 md:py-4 bg-accent text-black rounded-lg font-bold text-lg md:text-xl 
                                            hover:bg-accent/80 disabled:bg-gray-500 disabled:cursor-not-allowed 
-                                           transition-all 
+                                           transition-all cursor-target
                                            [transform:translateZ(0px)]
                                            hover:scale-105 hover:[transform:translateZ(15px)] active:[transform:translateZ(5px)]
                                            flex items-center justify-center gap-2 mx-auto shadow-lg shadow-accent/20

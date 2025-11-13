@@ -12,7 +12,7 @@ export default function RankingScreen() {
   const [autoRefresh, setAutoRefresh] = useState(false)
 
   return (
-    <div className="min-h-screen bg-bg-primary text-white p-6 font-cyber">
+    <div className="min-h-screen bg-bg-primary text-white p-6">
       <MatrixRain 
         color="#00FF00" 
         fontSize={16}

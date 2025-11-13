@@ -116,7 +116,7 @@ export default function Header() {
   return (
     <header className="absolute top-0 left-0 right-0 z-50 flex items-center justify-between p-4 bg-black/30 backdrop-blur-sm border-b border-primary/20">
       {/* Logo ou Nome do Jogo */}
-      <Link to="/" className="text-2xl font-bold text-primary hover:text-accent transition-colors font-cyber" title="Voltar à Tela Inicial">
+      <Link to="/" className="text-2xl font-bold text-primary hover:text-accent transition-colors font-cyber cursor-target" title="Voltar à Tela Inicial">
         CYBER-STOP
       </Link>
 
@@ -125,7 +125,7 @@ export default function Header() {
         {/* Link da Loja */}
         <button
           onClick={() => navigate('/shop')}
-          className="text-text-muted hover:text-secondary transition-colors flex items-center gap-2"
+          className="text-text-muted hover:text-secondary transition-colors flex items-center gap-2 cursor-target"
           title="Loja"
         >
           <Store size={20} />
@@ -147,7 +147,7 @@ export default function Header() {
           />
           <div className="hidden md:flex flex-col text-left">
             <span className="text-sm font-semibold text-white">{user?.nome_de_usuario || 'Jogador'}</span>
-            <Link to="/profile" className="text-xs text-text-muted hover:text-primary">
+            <Link to="/profile" className="text-xs text-text-muted hover:text-primary cursor-target">
               Ver Perfil
             </Link>
           </div>
@@ -156,7 +156,7 @@ export default function Header() {
         {/* Botão de Logout */}
         <button
           onClick={handleLogout}
-          className="bg-red-600/50 hover:bg-red-500/80 text-white p-2 rounded-lg transition-colors"
+          className="bg-red-600/50 hover:bg-red-500/80 text-white p-2 rounded-lg transition-colors cursor-target"
           title="Sair"
         >
           <LogOut size={20} />
