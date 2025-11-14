@@ -653,286 +653,236 @@ export function initSockets(httpServer) { //
 });
 
 
-    socket.on('powerup:use', async ({ powerUpId, targetPlayerId = null, targetTemaNome = null }) => { //
-        const salaId = socket.data.salaId; //
-        const usuarioJogadorId = socket.data.jogador_id; //
-        const currentRoundId = roomTimers.get(salaId)?.roundId; //
+    socket.on('powerup:use', async ({ powerUpId, targetPlayerId = null, targetTemaNome = null }) => {
+    const salaId = socket.data.salaId;
+    const usuarioJogadorId = socket.data.jogador_id;
+    const currentRoundId = roomTimers.get(salaId)?.roundId;
 
-        if (!usuarioJogadorId || !salaId || !powerUpId) { /* Retorna erro de parâmetros */ //
-             socket.emit('powerup:error', { message: 'Faltando parâmetros para usar power-up.' }); //
-             return; //
-        }
-        if (!currentRoundId) { //
-             socket.emit('powerup:error', { message: 'Não é possível usar power-ups fora de uma rodada ativa.' }); //
-             return; //
-        }
-
-
-        try { //
-          // --- Verificar inventário e decrementar ---
-          // Busca o item e o power-up associado para pegar o código
-          const { data: itemInventario, error: checkError } = await supa //
-              .from('jogador_power_up') //
-              .select(`
-                  jogador_power_up_id,
-                  quantidade,
-                  power_up ( codigo_identificador )
-              `) //
-              .eq('jogador_id', usuarioJogadorId) //
-              .eq('power_up_id', powerUpId) //
-              .maybeSingle(); // Usar maybeSingle se for possível não ter o item
-
-          if (checkError && checkError.code !== 'PGRST116') { throw checkError; } // // Ignora erro "not found"
-          if (!itemInventario || itemInventario.quantidade <= 0) { //
-             socket.emit('powerup:error', { message: 'Você não possui este power-up ou quantidade insuficiente.' }); //
-             return; //
-          }
-          const novaQuantidade = itemInventario.quantidade - 1; //
-          const { error: decrementError } = await supa //
-              .from('jogador_power_up') //
-              .update({ quantidade: novaQuantidade }) //
-              .eq('jogador_power_up_id', itemInventario.jogador_power_up_id); // Usa a chave primária da tabela de inventário
-          if (decrementError) { throw decrementError; } //
-          // Emite evento para o cliente atualizar o inventário visualmente
-          socket.emit('inventory:updated'); //
-          // --- Fim da verificação/decremento ---
-
-          const efeito = itemInventario.power_up.codigo_identificador; //
-          console.log(`[powerup:use] Sucesso: Jogador ${usuarioJogadorId} usou ${efeito} na sala ${salaId}, rodada ${currentRoundId}`); //
-
-          switch (efeito) { //
-            case 'BLUR_OPPONENT_SCREEN_5S': //
-            case 'JUMPSCARE': // Alias para o mesmo efeito
-              // Emite para todos os outros na sala com duração de 3 segundos
-              socket.to(salaId).emit('effect:jumpscare', { attackerId: usuarioJogadorId, duration: 3 /*, image, sound */ }); //
-              socket.emit('powerup:ack', { codigo: efeito, message: 'Jumpscare enviado! Oponente ficará bloqueado por 3s' }); // Confirma para quem usou //
-              break;
-            case 'SKIP_OWN_CATEGORY': //
-              // Emite apenas para o socket que usou o power-up
-              socket.emit('effect:enable_skip', { powerUpId: powerUpId }); //
-              // Não precisa de 'powerup:ack' aqui pois o 'effect:enable_skip' já é a confirmação
-              break;
-            case 'REVEAL_OPPONENT_ANSWER': //
-              addRevealRequest(salaId, currentRoundId, usuarioJogadorId); //
-              socket.emit('powerup:ack', { codigo: efeito, message: 'Revelação de resposta ativada para o final desta rodada.' }); //
-              break;
-            case 'BLOCK_OPPONENT_TYPE_5S': //
-              // Bloqueia digitação do adversário por 5 segundos
-              try {
-                const todosJogadores = await getJogadoresDaSala(salaId);
-                const oponentesIds = todosJogadores.filter(id => id !== usuarioJogadorId);
-                
-                if (oponentesIds.length === 0) {
-                  socket.emit('powerup:error', { message: 'Não há oponentes na sala para bloquear.' });
-                  return;
-                }
-                
-                // Se targetPlayerId foi especificado, usa ele; senão seleciona aleatório
-                let targetId = targetPlayerId ? Number(targetPlayerId) : oponentesIds[Math.floor(Math.random() * oponentesIds.length)];
-                
-                // Verifica se o alvo é válido
-                if (!oponentesIds.includes(targetId)) {
-                  targetId = oponentesIds[0]; // Fallback para primeiro oponente
-                }
-                
-                const targetSocketId = await getSocketIdByPlayerId(targetId);
-                if (targetSocketId) {
-                  io.to(targetSocketId).emit('effect:block_typing', { duration: 5, attackerId: usuarioJogadorId });
-                  socket.emit('powerup:ack', { codigo: efeito, message: `Digitação do adversário bloqueada por 5 segundos!` });
-                  console.log(`[BLOCK_TYPE] Jogador ${usuarioJogadorId} bloqueou digitação de ${targetId} por 5s`);
-                } else {
-                  socket.emit('powerup:error', { message: 'Oponente não está conectado.' });
-                }
-              } catch (err) {
-                console.error('[BLOCK_TYPE] Erro:', err);
-                socket.emit('powerup:error', { message: 'Erro ao aplicar bloqueio de digitação.' });
-              }
-              break;
-            case 'CLEAR_OPPONENT_ANSWERS': //
-              // Apaga os campos já escritos do adversário
-              try {
-                const todosJogadores = await getJogadoresDaSala(salaId);
-                const oponentesIds = todosJogadores.filter(id => id !== usuarioJogadorId);
-                
-                if (oponentesIds.length === 0) {
-                  socket.emit('powerup:error', { message: 'Não há oponentes na sala para afetar.' });
-                  return;
-                }
-                
-                // Se targetPlayerId foi especificado, usa ele; senão seleciona aleatório
-                let targetId = targetPlayerId ? Number(targetPlayerId) : oponentesIds[Math.floor(Math.random() * oponentesIds.length)];
-                
-                // Verifica se o alvo é válido
-                if (!oponentesIds.includes(targetId)) {
-                  targetId = oponentesIds[0]; // Fallback para primeiro oponente
-                }
-                
-                // Apaga as respostas do adversário no banco de dados para a rodada atual
-                const { error: clearError } = await supa
-                  .from('participacao_rodada')
-                  .update({ resposta: '' })
-                  .eq('rodada_id', currentRoundId)
-                  .eq('jogador_id', targetId);
-                
-                if (clearError) {
-                  console.error('[CLEAR_ANSWERS] Erro ao limpar respostas:', clearError);
-                  socket.emit('powerup:error', { message: 'Erro ao apagar respostas do adversário.' });
-                  return;
-                }
-                
-                // Envia evento para o frontend do adversário limpar os campos
-                const targetSocketId = await getSocketIdByPlayerId(targetId);
-                if (targetSocketId) {
-                  io.to(targetSocketId).emit('effect:clear_answers', { attackerId: usuarioJogadorId });
-                  socket.emit('powerup:ack', { codigo: efeito, message: `Campos do adversário foram apagados!` });
-                  console.log(`[CLEAR_ANSWERS] Jogador ${usuarioJogadorId} apagou respostas de ${targetId}`);
-                } else {
-                  // Mesmo que não encontre socket, as respostas já foram apagadas do banco
-                  socket.emit('powerup:ack', { codigo: efeito, message: `Campos do adversário foram apagados!` });
-                  console.log(`[CLEAR_ANSWERS] Respostas de ${targetId} apagadas (jogador offline)`);
-                }
-              } catch (err) {
-                console.error('[CLEAR_ANSWERS] Erro:', err);
-                socket.emit('powerup:error', { message: 'Erro ao apagar campos do adversário.' });
-              }
-              break;
-            case 'SKIP_WORD': //
-              // Pular uma palavra e ganhar os pontos automaticamente
-              try {
-                if (!targetTemaNome) {
-                  socket.emit('powerup:error', { message: 'É necessário especificar qual palavra pular.' });
-                  return;
-                }
-
-                // Busca o nome do tema da rodada
-                const { data: temasRodada, error: temasError } = await supa
-                  .from('rodada_tema')
-                  .select('tema:tema_id(tema_nome)')
-                  .eq('rodada_id', currentRoundId);
-
-                if (temasError) throw temasError;
-                const temasValidos = (temasRodada || []).map(t => t.tema.tema_nome);
-
-                // Verifica se o tema informado é válido para esta rodada
-                if (!temasValidos.includes(targetTemaNome)) {
-                  socket.emit('powerup:error', { message: 'Tema inválido para esta rodada.' });
-                  return;
-                }
-
-                // Marca a palavra como pulada
-                addSkippedWord(salaId, currentRoundId, usuarioJogadorId, targetTemaNome);
-                socket.emit('powerup:ack', { codigo: efeito, message: `Palavra "${targetTemaNome}" foi pulada! Você ganhará pontos automaticamente.` });
-                console.log(`[SKIP_WORD] Jogador ${usuarioJogadorId} pulou palavra ${targetTemaNome} na rodada ${currentRoundId}`);
-              } catch (err) {
-                console.error('[SKIP_WORD] Erro:', err);
-                socket.emit('powerup:error', { message: 'Erro ao pular palavra.' });
-              }
-              break;
-            case 'DISREGARD_OPPONENT_WORD': //
-            case 'SKIP_OPPONENT_CATEGORY': // Alias para compatibilidade
-              // Ativa o powerup para permitir escolher qual categoria desconsiderar do oponente
-              // Similar ao SKIP_OWN_CATEGORY, mas afeta o oponente
-              try {
-                // Verifica se há oponentes
-                const todosJogadores = await getJogadoresDaSala(salaId);
-                const oponentesIds = todosJogadores.filter(id => id !== usuarioJogadorId);
-                
-                if (oponentesIds.length === 0) {
-                  socket.emit('powerup:error', { message: 'Não há oponentes na sala para afetar.' });
-                  return;
-                }
-
-                // Se targetTemaNome foi fornecido, já aplica diretamente
-                if (targetTemaNome) {
-                  // Se targetPlayerId foi especificado, usa ele; senão seleciona aleatório
-                  let targetId = targetPlayerId ? Number(targetPlayerId) : oponentesIds[Math.floor(Math.random() * oponentesIds.length)];
-                  
-                  // Verifica se o alvo é válido
-                  if (!oponentesIds.includes(targetId)) {
-                    targetId = oponentesIds[0]; // Fallback para primeiro oponente
-                  }
-
-                  // Busca o nome do tema da rodada
-                  const { data: temasRodada, error: temasError } = await supa
-                    .from('rodada_tema')
-                    .select('tema:tema_id(tema_nome)')
-                    .eq('rodada_id', currentRoundId);
-
-                  if (temasError) throw temasError;
-                  const temasValidos = (temasRodada || []).map(t => t.tema.tema_nome);
-
-                  // Verifica se o tema informado é válido para esta rodada
-                  if (!temasValidos.includes(targetTemaNome)) {
-                    socket.emit('powerup:error', { message: 'Tema inválido para esta rodada.' });
-                    return;
-                  }
-
-                  // Marca a palavra do oponente como desconsiderada
-                  addDisregardedOpponentWord(salaId, currentRoundId, targetId, targetTemaNome);
-                  
-                  // Notifica o oponente que sua categoria foi bloqueada
-                  const targetSocketId = await getSocketIdByPlayerId(targetId);
-                  if (targetSocketId) {
-                    // Busca o tema_id para enviar ao frontend
-                    const { data: temasRodadaFull, error: temasErrFull } = await supa
-                      .from('rodada_tema')
-                      .select('tema_id, tema:tema_id(tema_nome)')
-                      .eq('rodada_id', currentRoundId);
-                    
-                    let temaId = null;
-                    if (!temasErrFull && temasRodadaFull) {
-                      const temaFound = temasRodadaFull.find(t => t.tema?.tema_nome === targetTemaNome);
-                      if (temaFound) temaId = temaFound.tema_id;
-                    }
-                    
-                    if (temaId) {
-                      io.to(targetSocketId).emit('effect:category_disregarded', { 
-                        temaId: temaId, 
-                        temaNome: targetTemaNome,
-                        attackerId: usuarioJogadorId 
-                      });
-                    }
-                  }
-                  
-                  socket.emit('powerup:ack', { codigo: efeito, message: `Palavra "${targetTemaNome}" do oponente foi desconsiderada! Ele não ganhará pontos por ela.` });
-                  console.log(`[DISREGARD_OPPONENT_WORD] Jogador ${usuarioJogadorId} desconsiderou palavra "${targetTemaNome}" do jogador ${targetId} na rodada ${currentRoundId}`);
-                } else {
-                  // Ativa o modo de escolha (similar ao SKIP_OWN_CATEGORY)
-                  socket.emit('effect:enable_skip_opponent', { powerUpId: powerUpId });
-                }
-              } catch (err) {
-                console.error('[DISREGARD_OPPONENT_WORD] Erro:', err);
-                socket.emit('powerup:error', { message: 'Erro ao ativar desconsideração de palavra do oponente.' });
-              }
-              break;
-            default: //
-              console.warn(`[powerup:use] Efeito desconhecido: ${efeito}`); //
-              socket.emit('powerup:error', { message: `Efeito não implementado: ${efeito}`}); //
-          }
-        } catch (e) {
-            console.error(`[powerup:use ${usuarioJogadorId} ${powerUpId}] Error:`, e); //
-            socket.emit('powerup:error', { message: e.message || 'Erro ao processar power-up.' }); //
-        }
-    });
-
-    // *** INÍCIO DA MODIFICAÇÃO DO PASSO 5 ***
-    socket.on('player:react', ({ salaId, emojiId }) => {
-      const jogadorId = socket.data.jogador_id;
-      
-      // Validação básica
-      if (!salaId || !emojiId || !jogadorId) {
-        console.warn(`[REACTION] Evento inválido:`, { salaId, emojiId, jogadorId });
+    if (!usuarioJogadorId || !salaId || !powerUpId) {
+        socket.emit('powerup:error', { message: 'Faltando parâmetros para usar power-up.' });
         return;
-      }
+    }
+    if (!currentRoundId) {
+        socket.emit('powerup:error', { message: 'Não é possível usar power-ups fora de uma rodada ativa.' });
+        return;
+    }
 
-      console.log(`[REACTION] Jogador ${jogadorId} enviou '${emojiId}' para sala ${salaId}`);
+    try {
+        // --- INÍCIO DA CORREÇÃO ---
+        // Busca o item na tabela 'inventario' e faz join com 'item' para pegar o código
+        const { data: itemInventario, error: checkError } = await supa
+            .from('inventario') // <-- CORREÇÃO: Tabela 'inventario'
+            .select(`
+                inventario_id,  // <-- CORREÇÃO: PK da tabela 'inventario'
+                qtde,           // <-- CORREÇÃO: Coluna 'qtde'
+                item ( codigo_identificador ) // <-- CORREÇÃO: Join na tabela 'item'
+            `)
+            .eq('jogador_id', usuarioJogadorId)
+            .eq('item_id', powerUpId) // <-- CORREÇÃO: 'powerUpId' (do frontend) é o 'item_id' (do DB)
+            .maybeSingle(); // Mantém o maybeSingle
 
-      // Emite para TODOS na sala (incluindo o remetente)
-      io.to(salaId).emit('player:reacted', {
-        fromPlayerId: jogadorId,
-        emojiId: emojiId
-      });
-    });
+        if (checkError && checkError.code !== 'PGRST116') { throw checkError; }
+
+        if (!itemInventario || itemInventario.qtde <= 0) {
+            socket.emit('powerup:error', { message: 'Você não possui este power-up ou quantidade insuficiente.' });
+            return;
+        }
+
+        const novaQuantidade = itemInventario.qtde - 1;
+        const { error: decrementError } = await supa
+            .from('inventario') // <-- CORREÇÃO: Tabela 'inventario'
+            .update({ qtde: novaQuantidade }) // <-- CORREÇÃO: Coluna 'qtde'
+            .eq('inventario_id', itemInventario.inventario_id); // <-- CORREÇÃO: PK correta
+
+        if (decrementError) { throw decrementError; }
+
+        socket.emit('inventory:updated');
+        // --- FIM DA VERIFICAÇÃO/DECREMENTO ---
+
+        // Validação de segurança para o 'efeito'
+        if (!itemInventario.item || !itemInventario.item.codigo_identificador) {
+            console.error(`[powerup:use] Falha crítica: Item ${powerUpId} não tem um 'codigo_identificador' na tabela 'item'.`);
+            socket.emit('powerup:error', { message: `Item ${powerUpId} não está configurado corretamente no DB.` });
+            return;
+        }
+
+        const efeito = itemInventario.item.codigo_identificador; // <-- CORREÇÃO: Caminho do objeto
+        // --- FIM DA CORREÇÃO ---
+
+        console.log(`[powerup:use] Sucesso: Jogador ${usuarioJogadorId} usou ${efeito} na sala ${salaId}, rodada ${currentRoundId}`);
+
+        switch (efeito) {
+            case 'BLUR_OPPONENT_SCREEN_5S':
+            case 'JUMPSCARE':
+                socket.to(salaId).emit('effect:jumpscare', { attackerId: usuarioJogadorId, duration: 3 });
+                socket.emit('powerup:ack', { codigo: efeito, message: 'Jumpscare enviado! Oponente ficará bloqueado por 3s' });
+                break;
+            case 'SKIP_OWN_CATEGORY':
+                socket.emit('effect:enable_skip', { powerUpId: powerUpId });
+                break;
+            case 'REVEAL_OPPONENT_ANSWER':
+                addRevealRequest(salaId, currentRoundId, usuarioJogadorId);
+                socket.emit('powerup:ack', { codigo: efeito, message: 'Revelação de resposta ativada para o final desta rodada.' });
+                break;
+            case 'BLOCK_OPPONENT_TYPE_5S':
+                try {
+                    const todosJogadores = await getJogadoresDaSala(salaId);
+                    const oponentesIds = todosJogadores.filter(id => id !== usuarioJogadorId);
+
+                    if (oponentesIds.length === 0) {
+                        socket.emit('powerup:error', { message: 'Não há oponentes na sala para bloquear.' });
+                        return;
+                    }
+                    let targetId = targetPlayerId ? Number(targetPlayerId) : oponentesIds[Math.floor(Math.random() * oponentesIds.length)];
+                    if (!oponentesIds.includes(targetId)) {
+                        targetId = oponentesIds[0];
+                    }
+
+                    const targetSocketId = await getSocketIdByPlayerId(targetId);
+                    if (targetSocketId) {
+                        io.to(targetSocketId).emit('effect:block_typing', { duration: 5, attackerId: usuarioJogadorId });
+                        socket.emit('powerup:ack', { codigo: efeito, message: `Digitação do adversário bloqueada por 5 segundos!` });
+                        console.log(`[BLOCK_TYPE] Jogador ${usuarioJogadorId} bloqueou digitação de ${targetId} por 5s`);
+                    } else {
+                        socket.emit('powerup:error', { message: 'Oponente não está conectado.' });
+                    }
+                } catch (err) {
+                    console.error('[BLOCK_TYPE] Erro:', err);
+                    socket.emit('powerup:error', { message: 'Erro ao aplicar bloqueio de digitação.' });
+                }
+                break;
+            case 'CLEAR_OPPONENT_ANSWERS':
+                try {
+                    const todosJogadores = await getJogadoresDaSala(salaId);
+                    const oponentesIds = todosJogadores.filter(id => id !== usuarioJogadorId);
+
+                    if (oponentesIds.length === 0) {
+                        socket.emit('powerup:error', { message: 'Não há oponentes na sala para afetar.' });
+                        return;
+                    }
+                    let targetId = targetPlayerId ? Number(targetPlayerId) : oponentesIds[Math.floor(Math.random() * oponentesIds.length)];
+                    if (!oponentesIds.includes(targetId)) {
+                        targetId = oponentesIds[0];
+                    }
+                    
+                    const { error: clearError } = await supa
+                        .from('participacao_rodada')
+                        .update({ resposta: '' })
+                        .eq('rodada_id', currentRoundId)
+                        .eq('jogador_id', targetId);
+
+                    if (clearError) {
+                        console.error('[CLEAR_ANSWERS] Erro ao limpar respostas:', clearError);
+                        socket.emit('powerup:error', { message: 'Erro ao apagar respostas do adversário.' });
+                        return;
+                    }
+
+                    const targetSocketId = await getSocketIdByPlayerId(targetId);
+                    if (targetSocketId) {
+                        io.to(targetSocketId).emit('effect:clear_answers', { attackerId: usuarioJogadorId });
+                        socket.emit('powerup:ack', { codigo: efeito, message: `Campos do adversário foram apagados!` });
+                        console.log(`[CLEAR_ANSWERS] Jogador ${usuarioJogadorId} apagou respostas de ${targetId}`);
+                    } else {
+                        socket.emit('powerup:ack', { codigo: efeito, message: `Campos do adversário foram apagados!` });
+                        console.log(`[CLEAR_ANSWERS] Respostas de ${targetId} apagadas (jogador offline)`);
+                    }
+                } catch (err) {
+                    console.error('[CLEAR_ANSWERS] Erro:', err);
+                    socket.emit('powerup:error', { message: 'Erro ao apagar campos do adversário.' });
+                }
+                break;
+            case 'SKIP_WORD':
+                try {
+                    if (!targetTemaNome) {
+                        socket.emit('powerup:error', { message: 'É necessário especificar qual palavra pular.' });
+                        return;
+                    }
+                    const { data: temasRodada, error: temasError } = await supa
+                        .from('rodada_tema')
+                        .select('tema:tema_id(tema_nome)')
+                        .eq('rodada_id', currentRoundId);
+                    if (temasError) throw temasError;
+                    const temasValidos = (temasRodada || []).map(t => t.tema.tema_nome);
+                    if (!temasValidos.includes(targetTemaNome)) {
+                        socket.emit('powerup:error', { message: 'Tema inválido para esta rodada.' });
+                        return;
+                    }
+                    addSkippedWord(salaId, currentRoundId, usuarioJogadorId, targetTemaNome);
+                    socket.emit('powerup:ack', { codigo: efeito, message: `Palavra "${targetTemaNome}" foi pulada! Você ganhará pontos automaticamente.` });
+                    console.log(`[SKIP_WORD] Jogador ${usuarioJogadorId} pulou palavra ${targetTemaNome} na rodada ${currentRoundId}`);
+                } catch (err) {
+                    console.error('[SKIP_WORD] Erro:', err);
+                    socket.emit('powerup:error', { message: 'Erro ao pular palavra.' });
+                }
+                break;
+            case 'DISREGARD_OPPONENT_WORD':
+            case 'SKIP_OPPONENT_CATEGORY':
+                try {
+                    const todosJogadores = await getJogadoresDaSala(salaId);
+                    const oponentesIds = todosJogadores.filter(id => id !== usuarioJogadorId);
+
+                    if (oponentesIds.length === 0) {
+                        socket.emit('powerup:error', { message: 'Não há oponentes na sala para afetar.' });
+                        return;
+                    }
+                    if (targetTemaNome) {
+                        let targetId = targetPlayerId ? Number(targetPlayerId) : oponentesIds[Math.floor(Math.random() * oponentesIds.length)];
+                        if (!oponentesIds.includes(targetId)) {
+                            targetId = oponentesIds[0];
+                        }
+                        const { data: temasRodada, error: temasError } = await supa
+                            .from('rodada_tema')
+                            .select('tema:tema_id(tema_nome)')
+                            .eq('rodada_id', currentRoundId);
+                        if (temasError) throw temasError;
+                        const temasValidos = (temasRodada || []).map(t => t.tema.tema_nome);
+                        if (!temasValidos.includes(targetTemaNome)) {
+                            socket.emit('powerup:error', { message: 'Tema inválido para esta rodada.' });
+                            return;
+                        }
+                        addDisregardedOpponentWord(salaId, currentRoundId, targetId, targetTemaNome);
+
+                        const targetSocketId = await getSocketIdByPlayerId(targetId);
+                        if (targetSocketId) {
+                            const { data: temasRodadaFull, error: temasErrFull } = await supa
+                                .from('rodada_tema')
+                                .select('tema_id, tema:tema_id(tema_nome)')
+                                .eq('rodada_id', currentRoundId);
+
+                            let temaId = null;
+                            if (!temasErrFull && temasRodadaFull) {
+                                const temaFound = temasRodadaFull.find(t => t.tema?.tema_nome === targetTemaNome);
+                                if (temaFound) temaId = temaFound.tema_id;
+                            }
+
+                            if (temaId) {
+                                io.to(targetSocketId).emit('effect:category_disregarded', {
+                                    temaId: temaId,
+                                    temaNome: targetTemaNome,
+                                    attackerId: usuarioJogadorId
+                                });
+                            }
+                        }
+
+                        socket.emit('powerup:ack', { codigo: efeito, message: `Palavra "${targetTemaNome}" do oponente foi desconsiderada! Ele não ganhará pontos por ela.` });
+                        console.log(`[DISREGARD_OPPONENT_WORD] Jogador ${usuarioJogadorId} desconsiderou palavra "${targetTemaNome}" do jogador ${targetId} na rodada ${currentRoundId}`);
+                    } else {
+                        socket.emit('effect:enable_skip_opponent', { powerUpId: powerUpId });
+                    }
+                } catch (err) {
+                    console.error('[DISREGARD_OPPONENT_WORD] Erro:', err);
+                    socket.emit('powerup:error', { message: 'Erro ao ativar desconsideração de palavra do oponente.' });
+                }
+                break;
+            default:
+                console.warn(`[powerup:use] Efeito desconhecido: ${efeito}`);
+                socket.emit('powerup:error', { message: `Efeito não implementado: ${efeito}` });
+        }
+    } catch (e) {
+        console.error(`[powerup:use ${usuarioJogadorId} ${powerUpId}] Error:`, e);
+        socket.emit('powerup:error', { message: e.message || 'Erro ao processar power-up.' });
+    }
+});
     // *** FIM DA MODIFICAÇÃO DO PASSO 5 ***
 
     socket.on('disconnect', (reason) => { //

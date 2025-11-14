@@ -41,7 +41,8 @@ router.get('/inventory', requireAuth, async (req, res) => {
             .filter(it => it.item.tipo === 'POWERUP')
             .map(it => ({
                 ...it.item, // Espalha os detalhes do item (id, nome, etc.)
-                qtde: it.qtde // Adiciona a quantidade que o jogador possui
+                power_up_id: it.item.item_id, // O frontend espera 'power_up_id'
+                quantidade: it.qtde           // O frontend espera 'quantidade'
             }));
 
         res.status(200).json({ inventario: powerUps, moedas: moedas });

@@ -171,6 +171,8 @@ export function useGameSocket(salaId) {
 
     // ... (Lógica de fetchCurrentRound continua igual)
     const fetchCurrentRound = async () => {
+      console.log(`[useGameSocket] Garantindo entrada na sala ${salaId} (fetchCurrentRound)`);
+      joinRoom(salaId);
       try {
         console.log(`[useGameSocket] Buscando rodada atual para sala ${salaId}...`);
         const response = await api.get(`/matches/current/${salaId}`);

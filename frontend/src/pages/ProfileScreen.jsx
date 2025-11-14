@@ -1,11 +1,12 @@
-// UploadiaBreno/fronted/src/pages/ProfileScreen.jsx
-
 import { useState, useEffect } from 'react';
-import api from '../lib/api'; 
+// import api from '../lib/api'; // Removido import duplicado
 // (CORRIGIDO) Importa 'avatarList' (objetos) e 'DEFAULT_AVATAR' (que é o primeiro objeto da lista)
 import { avatarList, DEFAULT_AVATAR } from '../lib/avatarList'; 
 import GlitchText from '../components/GlitchText'; 
 import MatrixRain from '../components/MatrixRain';
+import api from '../lib/api'; // <-- Mantido este import
+import InventoryItem from '../components/InventoryItem'; // <-- IMPORTADO O NOVO COMPONENTE
+import { Coins } from 'lucide-react'; // <-- IMPORTADO ÍCONE DE MOEDAS
 
 function ProfileScreen() {
   const [profileData, setProfileData] = useState({
@@ -18,9 +19,18 @@ function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false); 
 
+  // --- NOVO STATE PARA O INVENTÁRIO ---
+  // Usamos nomes de estado separados para não conflitar com 'loading' do perfil
+  const [inventoryItems, setInventoryItems] = useState([]);
+  const [coins, setCoins] = useState(0);
+  const [inventoryLoading, setInventoryLoading] = useState(true);
+  const [inventoryError, setInventoryError] = useState(null);
+  // --- FIM DO NOVO STATE ---
+
   // (REMOVIDO) Não precisamos mais disso, pois o .src já vem completo do avatarList
   // const avatarBasePath = '/avatars/'; 
 
+  // useEffect existente para o perfil
   useEffect(() => {
     const fetchProfile = async () => {
       setLoading(true);
@@ -43,6 +53,30 @@ function ProfileScreen() {
     fetchProfile();
   }, []);
 
+  // --- NOVO EFFECT PARA BUSCAR INVENTÁRIO ---
+  useEffect(() => {
+    const fetchInventory = async () => {
+      try {
+        setInventoryLoading(true);
+        // Usamos a rota que corrigimos no shop.js [cite: UploadiaBreno/backend/routes/shop.js]
+        const { data } = await api.get('/shop/inventory');
+        
+        // Os dados já vêm formatados do backend
+        setInventoryItems(data.inventario || []);
+        setCoins(data.moedas || 0);
+        setInventoryError(null);
+      } catch (err) {
+        console.error("Erro ao buscar inventário:", err);
+        setInventoryError("Falha ao carregar inventário.");
+      } finally {
+        setInventoryLoading(false);
+      }
+    };
+
+    fetchInventory();
+  }, []); // Roda uma vez quando o componente monta
+  // --- FIM DO NOVO EFFECT ---
+
   const handleRandomAvatar = async () => {
     // (CORRIGIDO) Usa 'avatarList'
     if (isSaving || avatarList.length === 0) return;
@@ -58,7 +92,7 @@ function ProfileScreen() {
         newAvatarName = avatarList[randomIndex].nome; 
       } while (newAvatarName === profileData.avatar_nome);
     } else if (avatarList.length === 1) {
-       // (CORRIGIDO) Pega apenas o .nome
+        // (CORRIGIDO) Pega apenas o .nome
       newAvatarName = avatarList[0].nome;
     }
     
@@ -80,11 +114,34 @@ function ProfileScreen() {
     avatar => avatar.nome === profileData.avatar_nome
   ) || DEFAULT_AVATAR;
 
+  // --- NOVA FUNÇÃO HELPER PARA RENDERIZAR O INVENTÁRIO ---
+  const renderInventory = () => {
+    if (inventoryLoading) {
+      return <p className="text-gray-400 text-sm">Carregando power-ups...</p>;
+    }
+    if (inventoryError) {
+      return <p className="text-red-500 text-sm">{inventoryError}</p>;
+    }
+    if (inventoryItems.length === 0) {
+      return <p className="text-gray-400 text-sm">Nenhum power-up no inventário.</p>;
+    }
+    return (
+      // Grid responsiva para os power-ups
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {inventoryItems.map((item) => (
+          // Usamos 'power_up_id' que o backend agora envia
+          <InventoryItem key={item.power_up_id} item={item} />
+        ))}
+      </div>
+    );
+  };
+  // --- FIM DA FUNÇÃO HELPER ---
+
 
   return (
     <div className="flex justify-center items-center min-h-screen p-4 sm:p-8 text-white">
       <MatrixRain className='z-0' />
-      <div className="w-full max-w-md p-6 sm:p-8 bg-gray-800 rounded-lg shadow-2xl border border-gray-700 z-10 opacity-95">
+      <div className="w-full max-w-md p-6 sm:p-8 bg-gray-800 rounded-lg shadow-2xl border border-gray-700 z-10 opacity-95 overflow-y-auto max-h-[90vh]">
         
         <GlitchText text="Meu perfil" fontSize={2} color="rgb(57, 255, 20)" fontWeight="bold" textAlign="center" font="https://fonts.gstatic.com/s/orbitron/v35/yMJMMIlzdpvBhQQL_SC3X9yhF25-T1ny_Cmxpg.ttf" />
         
@@ -122,6 +179,26 @@ function ProfileScreen() {
             </svg>
           </button>
         </div>
+
+        {/* --- SEÇÃO DE INVENTÁRIO ADICIONADA --- */}
+        <div className="mb-8">
+          <label className="block text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">
+            Inventário
+          </label>
+          
+          {/* Moedas */}
+          <div className="flex items-center gap-3 mt-1 block w-full rounded-md border-gray-600 bg-gray-900 p-3 shadow-sm sm:text-lg text-white font-mono mb-4">
+            <Coins size={20} className="text-blue-400" />
+            <span>Moedas:</span>
+            <span className="text-blue-400">
+              {inventoryLoading ? '...' : coins}
+            </span>
+          </div>
+
+          {/* Power-ups */}
+          {renderInventory()}
+        </div>
+        {/* --- FIM DA SEÇÃO DE INVENTÁRIO --- */}
 
         <div className="space-y-6 mb-10">
           <div>
