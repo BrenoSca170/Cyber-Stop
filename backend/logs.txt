@@ -1,0 +1,347 @@
+
+> dev
+> nodemon src/server.js
+
+[33m[nodemon] 3.1.10[39m
+[33m[nodemon] to restart at any time, enter `rs`[39m
+[33m[nodemon] watching path(s): *.*[39m
+[33m[nodemon] watching extensions: js,mjs,cjs,json[39m
+[32m[nodemon] starting `node src/server.js`[39m
+API rodando em http://localhost:3001
+[0mPOST /auth/login [32m200[0m 855.564 ms - 240[0m
+[requireAuth] ID do jogador anexado: 46
+[shop.js /inventory] req.jogadorId recebido: 46
+[shop.js /inventory] req.user.jogador_id recebido: 46
+[requireAuth] ID do jogador anexado: 46
+[0mGET /auth/me [32m200[0m 345.864 ms - 117[0m
+[requireAuth] ID do jogador anexado: 46
+[shop.js /inventory] req.jogadorId recebido: 46
+[shop.js /inventory] req.user.jogador_id recebido: 46
+[requireAuth] ID do jogador anexado: 46
+[0mGET /auth/me [32m200[0m 410.435 ms - 117[0m
+[0mGET /shop/inventory [32m200[0m 485.268 ms - 29[0m
+[0mGET /shop/inventory [32m200[0m 525.715 ms - 29[0m
+[0mPOST /auth/login [32m200[0m 147.087 ms - 244[0m
+[requireAuth] ID do jogador anexado: 79
+[shop.js /inventory] req.jogadorId recebido: 79
+[shop.js /inventory] req.user.jogador_id recebido: 79
+[requireAuth] ID do jogador anexado: 79
+[0mGET /auth/me [36m304[0m 134.415 ms - -[0m
+[0mGET /shop/inventory [36m304[0m 234.193 ms - -[0m
+[requireAuth] ID do jogador anexado: 79
+[0mGET /auth/me [36m304[0m 128.458 ms - -[0m
+[requireAuth] ID do jogador anexado: 79
+[shop.js /inventory] req.jogadorId recebido: 79
+[shop.js /inventory] req.user.jogador_id recebido: 79
+[0mGET /shop/inventory [36m304[0m 130.846 ms - -[0m
+[requireAuth] ID do jogador anexado: 46
+[requireAuth] ID do jogador anexado: 46
+[0mGET /rooms/available [32m200[0m 98.406 ms - 241[0m
+[0mGET /rooms/available [32m200[0m 102.443 ms - 241[0m
+[requireAuth] ID do jogador anexado: 46
+---> [POST /rooms] Sala 559 criada com sucesso.
+[0mPOST /rooms [32m200[0m 164.930 ms - 30[0m
+[requireAuth] ID do jogador anexado: 46
+---> [GET /rooms/559] REQUISIÇÃO RECEBIDA por jogador 46
+---> [GET /rooms/559] Status encontrado no banco: 'waiting'
+---> [GET /rooms/559] Status OK. Buscando jogadores...
+[requireAuth] ID do jogador anexado: 46
+---> [GET /rooms/559] REQUISIÇÃO RECEBIDA por jogador 46
+---> [GET /rooms/559] Jogadores encontrados: [ 'manoteste' ]
+[0mGET /rooms/559 [32m200[0m 128.997 ms - 209[0m
+---> [GET /rooms/559] Status encontrado no banco: 'waiting'
+---> [GET /rooms/559] Status OK. Buscando jogadores...
+---> [GET /rooms/559] Jogadores encontrados: [ 'manoteste' ]
+[0mGET /rooms/559 [32m200[0m 178.244 ms - 209[0m
+[requireAuth] ID do jogador anexado: 79
+[0mGET /rooms/available [32m200[0m 117.048 ms - 361[0m
+[requireAuth] ID do jogador anexado: 79
+[0mGET /rooms/available [36m304[0m 93.533 ms - -[0m
+[requireAuth] ID do jogador anexado: 46
+---> [GET /rooms/559] REQUISIÇÃO RECEBIDA por jogador 46
+---> [GET /rooms/559] Status encontrado no banco: 'waiting'
+---> [GET /rooms/559] Status OK. Buscando jogadores...
+---> [GET /rooms/559] Jogadores encontrados: [ 'manoteste' ]
+[0mGET /rooms/559 [36m304[0m 146.223 ms - -[0m
+Socket authenticated for jogador_id: 79
+a user connected: siTlRqEu_OXzkAtsAAAB jogador_id: 79
+Socket authenticated for jogador_id: 46
+a user connected: qkw5OukNtk5ZHJ0BAAAD jogador_id: 46
+Socket qkw5OukNtk5ZHJ0BAAAD (jogador 46) joining room 559
+Socket qkw5OukNtk5ZHJ0BAAAD (jogador 46) joining room 559
+Socket qkw5OukNtk5ZHJ0BAAAD (jogador 46) joining room 559
+Socket qkw5OukNtk5ZHJ0BAAAD (jogador 46) joining room 559
+[requireAuth] ID do jogador anexado: 79
+---> [POST /rooms/join] REQUISIÇÃO RECEBIDA por jogador 79 para sala 559
+---> [POST /rooms/join] Verificando status da sala 559...
+---> [POST /rooms/join] Status da sala 559: 'waiting'. Criador: 46
+---> [POST /rooms/join] Verificando quantidade de jogadores na sala 559...
+---> [POST /rooms/join] Sala 559 tem 1 jogador(es). Jogador 79 já está na sala: false
+---> [POST /rooms/join] Tentando UPSERT jogador 79 na sala 559...
+[requireAuth] ID do jogador anexado: 46
+---> [GET /rooms/559] REQUISIÇÃO RECEBIDA por jogador 46
+---> [GET /rooms/559] Status encontrado no banco: 'waiting'
+---> [GET /rooms/559] Status OK. Buscando jogadores...
+---> [GET /rooms/559] Jogadores encontrados: [ 'manoteste' ]
+[0mGET /rooms/559 [36m304[0m 143.113 ms - -[0m
+---> [POST /rooms/join] UPSERT de jogador 79 na sala 559 bem-sucedido.
+---> [POST /rooms/join] Buscando jogadores atualizados para emitir evento...
+---> [POST /rooms/join] Emitindo room:players_updated para sala 559 com jogadores: [ 'manoteste', 'stopteste11' ]
+---> [POST /rooms/join] Resposta enviada com sucesso para jogador 79.
+[0mPOST /rooms/join [32m200[0m 367.619 ms - 31[0m
+Socket siTlRqEu_OXzkAtsAAAB (jogador 79) joining room 559
+Socket siTlRqEu_OXzkAtsAAAB (jogador 79) joining room 559
+[requireAuth] ID do jogador anexado: 79
+---> [GET /rooms/559] REQUISIÇÃO RECEBIDA por jogador 79
+---> [GET /rooms/559] Status encontrado no banco: 'waiting'
+---> [GET /rooms/559] Status OK. Buscando jogadores...
+---> [GET /rooms/559] Jogadores encontrados: [ 'manoteste', 'stopteste11' ]
+[0mGET /rooms/559 [32m200[0m 119.401 ms - 224[0m
+[requireAuth] ID do jogador anexado: 79
+---> [GET /rooms/559] REQUISIÇÃO RECEBIDA por jogador 79
+---> [GET /rooms/559] Status encontrado no banco: 'waiting'
+---> [GET /rooms/559] Status OK. Buscando jogadores...
+---> [GET /rooms/559] Jogadores encontrados: [ 'manoteste', 'stopteste11' ]
+[0mGET /rooms/559 [36m304[0m 141.095 ms - -[0m
+Socket siTlRqEu_OXzkAtsAAAB (jogador 79) joining room 559
+Socket siTlRqEu_OXzkAtsAAAB (jogador 79) joining room 559
+[requireAuth] ID do jogador anexado: 46
+---> [GET /rooms/559] REQUISIÇÃO RECEBIDA por jogador 46
+---> [GET /rooms/559] Status encontrado no banco: 'waiting'
+---> [GET /rooms/559] Status OK. Buscando jogadores...
+---> [GET /rooms/559] Jogadores encontrados: [ 'manoteste', 'stopteste11' ]
+[0mGET /rooms/559 [32m200[0m 200.469 ms - 223[0m
+[requireAuth] ID do jogador anexado: 79
+---> [GET /rooms/559] REQUISIÇÃO RECEBIDA por jogador 79
+---> [GET /rooms/559] Status encontrado no banco: 'waiting'
+---> [GET /rooms/559] Status OK. Buscando jogadores...
+---> [GET /rooms/559] Jogadores encontrados: [ 'manoteste', 'stopteste11' ]
+[0mGET /rooms/559 [36m304[0m 167.276 ms - -[0m
+[requireAuth] ID do jogador anexado: 46
+[requireAuth] ID do jogador anexado: 46
+---> [GET /rooms/559] REQUISIÇÃO RECEBIDA por jogador 46
+---> [GET /rooms/559] Status encontrado no banco: 'waiting'
+---> [GET /rooms/559] Status OK. Buscando jogadores...
+---> [GET /rooms/559] Jogadores encontrados: [ 'manoteste', 'stopteste11' ]
+[0mGET /rooms/559 [36m304[0m 154.730 ms - -[0m
+[requireAuth] ID do jogador anexado: 79
+---> [GET /rooms/559] REQUISIÇÃO RECEBIDA por jogador 79
+---> [GET /rooms/559] Status encontrado no banco: 'waiting'
+---> [GET /rooms/559] Status OK. Buscando jogadores...
+---> [GET /rooms/559] Jogadores encontrados: [ 'manoteste', 'stopteste11' ]
+[0mGET /rooms/559 [36m304[0m 147.600 ms - -[0m
+[requireAuth] ID do jogador anexado: 46
+---> [GET /rooms/559] REQUISIÇÃO RECEBIDA por jogador 46
+---> [GET /rooms/559] Status encontrado no banco: 'waiting'
+---> [GET /rooms/559] Status OK. Buscando jogadores...
+---> [GET /rooms/559] Jogadores encontrados: [ 'manoteste', 'stopteste11' ]
+[0mGET /rooms/559 [36m304[0m 130.858 ms - -[0m
+[requireAuth] ID do jogador anexado: 79
+---> [GET /rooms/559] REQUISIÇÃO RECEBIDA por jogador 79
+---> [GET /rooms/559] Status encontrado no banco: 'waiting'
+---> [GET /rooms/559] Status OK. Buscando jogadores...
+---> [GET /rooms/559] Jogadores encontrados: [ 'manoteste', 'stopteste11' ]
+[0mGET /rooms/559 [36m304[0m 141.083 ms - -[0m
+[requireAuth] ID do jogador anexado: 46
+---> [GET /rooms/559] REQUISIÇÃO RECEBIDA por jogador 46
+---> [GET /rooms/559] Status encontrado no banco: 'waiting'
+---> [GET /rooms/559] Status OK. Buscando jogadores...
+---> [GET /rooms/559] Jogadores encontrados: [ 'manoteste', 'stopteste11' ]
+[0mGET /rooms/559 [36m304[0m 164.354 ms - -[0m
+[requireAuth] ID do jogador anexado: 79
+---> [GET /rooms/559] REQUISIÇÃO RECEBIDA por jogador 79
+---> [GET /rooms/559] Status encontrado no banco: 'waiting'
+---> [GET /rooms/559] Status OK. Buscando jogadores...
+---> [GET /rooms/559] Jogadores encontrados: [ 'manoteste', 'stopteste11' ]
+[0mGET /rooms/559 [36m304[0m 135.345 ms - -[0m
+[requireAuth] ID do jogador anexado: 46
+---> [GET /rooms/559] REQUISIÇÃO RECEBIDA por jogador 46
+---> [GET /rooms/559] Status encontrado no banco: 'waiting'
+---> [GET /rooms/559] Status OK. Buscando jogadores...
+---> [GET /rooms/559] Jogadores encontrados: [ 'manoteste', 'stopteste11' ]
+[0mGET /rooms/559 [36m304[0m 176.821 ms - -[0m
+[requireAuth] ID do jogador anexado: 79
+---> [GET /rooms/559] REQUISIÇÃO RECEBIDA por jogador 79
+---> [GET /rooms/559] Status encontrado no banco: 'waiting'
+---> [GET /rooms/559] Status OK. Buscando jogadores...
+---> [GET /rooms/559] Jogadores encontrados: [ 'manoteste', 'stopteste11' ]
+[0mGET /rooms/559 [36m304[0m 195.429 ms - -[0m
+[requireAuth] ID do jogador anexado: 46
+---> [GET /rooms/559] REQUISIÇÃO RECEBIDA por jogador 46
+---> [GET /rooms/559] Status encontrado no banco: 'waiting'
+---> [GET /rooms/559] Status OK. Buscando jogadores...
+---> [GET /rooms/559] Jogadores encontrados: [ 'manoteste', 'stopteste11' ]
+[0mGET /rooms/559 [36m304[0m 118.514 ms - -[0m
+[requireAuth] ID do jogador anexado: 79
+---> [GET /rooms/559] REQUISIÇÃO RECEBIDA por jogador 79
+---> [GET /rooms/559] Status encontrado no banco: 'waiting'
+---> [GET /rooms/559] Status OK. Buscando jogadores...
+---> [GET /rooms/559] Jogadores encontrados: [ 'manoteste', 'stopteste11' ]
+[0mGET /rooms/559 [36m304[0m 121.952 ms - -[0m
+[requireAuth] ID do jogador anexado: 46
+---> [GET /rooms/559] REQUISIÇÃO RECEBIDA por jogador 46
+---> [GET /rooms/559] Status encontrado no banco: 'waiting'
+---> [GET /rooms/559] Status OK. Buscando jogadores...
+---> [GET /rooms/559] Jogadores encontrados: [ 'manoteste', 'stopteste11' ]
+[0mGET /rooms/559 [36m304[0m 153.799 ms - -[0m
+[requireAuth] ID do jogador anexado: 79
+---> [GET /rooms/559] REQUISIÇÃO RECEBIDA por jogador 79
+---> [GET /rooms/559] Status encontrado no banco: 'waiting'
+---> [GET /rooms/559] Status OK. Buscando jogadores...
+---> [GET /rooms/559] Jogadores encontrados: [ 'manoteste', 'stopteste11' ]
+[0mGET /rooms/559 [36m304[0m 144.505 ms - -[0m
+[requireAuth] ID do jogador anexado: 46
+---> [GET /rooms/559] REQUISIÇÃO RECEBIDA por jogador 46
+---> [GET /rooms/559] Status encontrado no banco: 'waiting'
+---> [GET /rooms/559] Status OK. Buscando jogadores...
+---> [GET /rooms/559] Jogadores encontrados: [ 'manoteste', 'stopteste11' ]
+[0mGET /rooms/559 [36m304[0m 133.669 ms - -[0m
+[requireAuth] ID do jogador anexado: 79
+---> [GET /rooms/559] REQUISIÇÃO RECEBIDA por jogador 79
+---> [GET /rooms/559] Status encontrado no banco: 'waiting'
+---> [GET /rooms/559] Status OK. Buscando jogadores...
+---> [GET /rooms/559] Jogadores encontrados: [ 'manoteste', 'stopteste11' ]
+[0mGET /rooms/559 [36m304[0m 123.710 ms - -[0m
+[SORTEIO_COERENTE] {
+  sala_id: 559,
+  rounds: [
+    { n: 1, letra_id: 2, letra: 'B', temas: [Array] },
+    { n: 2, letra_id: 14, letra: 'N', temas: [Array] },
+    { n: 3, letra_id: 25, letra: 'Y', temas: [Array] },
+    { n: 4, letra_id: 1, letra: 'A', temas: [Array] },
+    { n: 5, letra_id: 19, letra: 'S', temas: [Array] }
+  ]
+}
+[TIMER] Scheduling countdown for sala 559, round 1995, duration 20s
+[0mPOST /matches/start [32m200[0m 7515.409 ms - 950[0m
+[requireAuth] ID do jogador anexado: 46
+---> [GET /rooms/559] REQUISIÇÃO RECEBIDA por jogador 46
+---> [GET /rooms/559] Status encontrado no banco: 'in_progress'
+---> [GET /rooms/559] Status OK. Buscando jogadores...
+---> [GET /rooms/559] Jogadores encontrados: [ 'manoteste', 'stopteste11' ]
+[0mGET /rooms/559 [32m200[0m 158.624 ms - 227[0m
+Socket qkw5OukNtk5ZHJ0BAAAD (jogador 46) joining room 559
+Socket qkw5OukNtk5ZHJ0BAAAD (jogador 46) joining room 559
+[requireAuth] ID do jogador anexado: 46
+[requireAuth] ID do jogador anexado: 79
+---> [GET /rooms/559] REQUISIÇÃO RECEBIDA por jogador 79
+---> [GET /rooms/559] Status encontrado no banco: 'in_progress'
+---> [GET /rooms/559] Status OK. Buscando jogadores...
+[requireAuth] ID do jogador anexado: 46
+[shop.js /inventory] req.jogadorId recebido: 46
+[shop.js /inventory] req.user.jogador_id recebido: 46
+[requireAuth] ID do jogador anexado: 46
+[shop.js /inventory] req.jogadorId recebido: 46
+[shop.js /inventory] req.user.jogador_id recebido: 46
+[requireAuth] ID do jogador anexado: 46
+---> [GET /rooms/559] Jogadores encontrados: [ 'manoteste', 'stopteste11' ]
+[0mGET /rooms/559 [32m200[0m 216.571 ms - 228[0m
+[0mGET /shop/inventory [36m304[0m 171.222 ms - -[0m
+[0mGET /shop/inventory [32m200[0m 175.630 ms - 29[0m
+[TIMER] Tempo restante calculado para sala 559: 20s
+[MATCHES/START] Emitindo round:ready e round:started para sala 559 (tentativa 1, timeLeft: 20s)
+[TIMER] Tempo restante calculado para sala 559: 20s
+[MATCHES/CURRENT] Enviando rodada atual 1995 para sala 559 (timeLeft: 20s)
+[0mGET /matches/current/559 [32m200[0m 318.662 ms - 48[0m
+[TIMER] Tempo restante calculado para sala 559: 20s
+[MATCHES/CURRENT] Enviando rodada atual 1995 para sala 559 (timeLeft: 20s)
+[0mGET /matches/current/559 [32m200[0m 329.501 ms - 48[0m
+Socket siTlRqEu_OXzkAtsAAAB (jogador 79) joining room 559
+Socket siTlRqEu_OXzkAtsAAAB (jogador 79) joining room 559
+[requireAuth] ID do jogador anexado: 79
+[shop.js /inventory] req.jogadorId recebido: 79
+[shop.js /inventory] req.user.jogador_id recebido: 79
+[requireAuth] ID do jogador anexado: 79
+[TIMER] Tempo restante calculado para sala 559: 20s
+[MATCHES/START] Emitindo round:ready e round:started para sala 559 (tentativa 2, timeLeft: 20s)
+[0mGET /shop/inventory [36m304[0m 90.756 ms - -[0m
+[requireAuth] ID do jogador anexado: 79
+[shop.js /inventory] req.jogadorId recebido: 79
+[shop.js /inventory] req.user.jogador_id recebido: 79
+[0mGET /shop/inventory [36m304[0m 116.697 ms - -[0m
+[TIMER] Tempo restante calculado para sala 559: 19s
+[MATCHES/CURRENT] Enviando rodada atual 1995 para sala 559 (timeLeft: 19s)
+[0mGET /matches/current/559 [32m200[0m 277.860 ms - 48[0m
+[requireAuth] ID do jogador anexado: 79
+[TIMER] Tempo restante calculado para sala 559: 19s
+[MATCHES/CURRENT] Enviando rodada atual 1995 para sala 559 (timeLeft: 19s)
+[0mGET /matches/current/559 [36m304[0m 241.814 ms - -[0m
+[TIMER] Tempo restante calculado para sala 559: 19s
+[MATCHES/START] Emitindo round:ready e round:started para sala 559 (tentativa 3 - fallback, timeLeft: 19s)
+[CLICK STOP] sala=559 round=1995 by=46
+[TIMER] Timer for sala 559 cleared.
+[STOP->NEXT_ROUND] Aguardando 10 segundos antes de iniciar próxima rodada 1996 para sala 559
+[STOP->NEXT_ROUND] Iniciando próxima rodada 1996 para sala 559
+[TIMER] Scheduling countdown for sala 559, round 1996, duration 20s
+[TIMER] Tempo restante calculado para sala 559: 20s
+[TIMER] Tempo restante calculado para sala 559: 20s
+[CLICK STOP] sala=559 round=1996 by=46
+[TIMER] Timer for sala 559 cleared.
+[STOP->NEXT_ROUND] Aguardando 10 segundos antes de iniciar próxima rodada 1997 para sala 559
+[STOP->NEXT_ROUND] Iniciando próxima rodada 1997 para sala 559
+[TIMER] Scheduling countdown for sala 559, round 1997, duration 20s
+[TIMER] Tempo restante calculado para sala 559: 20s
+[TIMER] Tempo restante calculado para sala 559: 20s
+[CLICK STOP] sala=559 round=1997 by=46
+[TIMER] Timer for sala 559 cleared.
+[STOP->NEXT_ROUND] Aguardando 10 segundos antes de iniciar próxima rodada 1998 para sala 559
+[STOP->NEXT_ROUND] Iniciando próxima rodada 1998 para sala 559
+[TIMER] Scheduling countdown for sala 559, round 1998, duration 20s
+[TIMER] Tempo restante calculado para sala 559: 20s
+[TIMER] Tempo restante calculado para sala 559: 20s
+[CLICK STOP] sala=559 round=1998 by=46
+[TIMER] Timer for sala 559 cleared.
+[STOP->NEXT_ROUND] Aguardando 10 segundos antes de iniciar próxima rodada 1999 para sala 559
+[STOP->NEXT_ROUND] Iniciando próxima rodada 1999 para sala 559
+[TIMER] Scheduling countdown for sala 559, round 1999, duration 20s
+[TIMER] Tempo restante calculado para sala 559: 20s
+[TIMER] Tempo restante calculado para sala 559: 20s
+[CLICK STOP] sala=559 round=1999 by=79
+[TIMER] Timer for sala 559 cleared.
+[MOEDAS] Adicionando 30 moedas para jogador 46...
+[MOEDAS] 30 moedas adicionadas para jogador 46. Novo saldo: 60
+[MOEDAS] Adicionando 30 moedas para jogador 79...
+[MOEDAS] 30 moedas adicionadas para jogador 79. Novo saldo: 90
+[STOP->MATCH_END] Atualizando sala 559 para 'terminada'
+[saveRanking] Ranking salvo para sala 559 com 2 jogadores
+[STOP->MATCH_END] Fim de partida para sala 559
+[0mGET /ranking/sala/559?limit=10 [32m200[0m 49.594 ms - 326[0m
+[requireAuth] ID do jogador anexado: 79
+[shop.js /inventory] req.jogadorId recebido: 79
+[shop.js /inventory] req.user.jogador_id recebido: 79
+[0mGET /shop/inventory [32m200[0m 99.862 ms - 29[0m
+[0mGET /ranking/sala/559?limit=10 [36m304[0m 67.551 ms - -[0m
+[0mGET /ranking/sala/559?limit=10 [32m200[0m 122.383 ms - 326[0m
+[requireAuth] ID do jogador anexado: 46
+[shop.js /inventory] req.jogadorId recebido: 46
+[shop.js /inventory] req.user.jogador_id recebido: 46
+[requireAuth] ID do jogador anexado: 46
+[shop.js /inventory] req.jogadorId recebido: 46
+[shop.js /inventory] req.user.jogador_id recebido: 46
+[requireAuth] ID do jogador anexado: 79
+[shop.js /inventory] req.jogadorId recebido: 79
+[shop.js /inventory] req.user.jogador_id recebido: 79
+[0mGET /ranking/sala/559?limit=10 [32m200[0m 148.395 ms - 326[0m
+[0mGET /shop/inventory [32m200[0m 188.986 ms - 29[0m
+[0mGET /shop/inventory [32m200[0m 198.357 ms - 29[0m
+[0mGET /shop/inventory [36m304[0m 110.865 ms - -[0m
+[requireAuth] ID do jogador anexado: 79
+---> [LEAVE /rooms/559/leave] REQUISIÇÃO RECEBIDA por jogador 79
+---> [LEAVE /rooms/559/leave] Dados da sala encontrados: { status: 'terminada', jogador_criador_id: 46 }
+---> [LEAVE /rooms/559/leave] Condição de abandono NÃO atendida (Criador=46, Status=terminada)
+---> [LEAVE /rooms/559/leave] Jogador 79 removido de jogador_sala (Erro: Nenhum)
+[0mPOST /rooms/559/leave [32m200[0m 372.744 ms - 48[0m
+[requireAuth] ID do jogador anexado: 46
+---> [LEAVE /rooms/559/leave] REQUISIÇÃO RECEBIDA por jogador 46
+---> [LEAVE /rooms/559/leave] Dados da sala encontrados: { status: 'terminada', jogador_criador_id: 46 }
+---> [LEAVE /rooms/559/leave] Condição de abandono NÃO atendida (Criador=46, Status=terminada)
+---> [LEAVE /rooms/559/leave] Jogador 46 removido de jogador_sala (Erro: Nenhum)
+[0mPOST /rooms/559/leave [32m200[0m 179.506 ms - 48[0m
+user disconnected: qkw5OukNtk5ZHJ0BAAAD jogador_id: 46 reason: client namespace disconnect
+[DISCONNECT] Removendo jogador 46 da sala 559 (se existir)...
+[DISCONNECT] Jogador 46 removido da sala 559 (ou já não estava).
+[DISCONNECT] Emitindo players_updated para sala 559: []
+user disconnected: siTlRqEu_OXzkAtsAAAB jogador_id: 79 reason: client namespace disconnect
+[DISCONNECT] Removendo jogador 79 da sala 559 (se existir)...
+[DISCONNECT] Jogador 79 removido da sala 559 (ou já não estava).
+[DISCONNECT] Emitindo players_updated para sala 559: []

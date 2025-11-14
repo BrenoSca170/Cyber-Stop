@@ -8,11 +8,15 @@ export default function MatchEndScreen({ totais, vencedor, meuJogadorId, salaId,
   const navigate = useNavigate();
 
   // Rebusca o inventário (para moedas) quando esta tela aparece
+  // Rebusca o inventário (para moedas) quando esta tela aparece
   useEffect(() => {
-    if(onReFetchInventory) {
+    if (onReFetchInventory) {
       onReFetchInventory();
     }
-  }, [onReFetchInventory]);
+    // Queremos rodar só uma vez quando a tela monta
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
 
   const isEmpate = vencedor?.empate;
   const myScore = totais[meuJogadorId] || 0;
@@ -48,7 +52,7 @@ export default function MatchEndScreen({ totais, vencedor, meuJogadorId, salaId,
            className="mb-3 p-4 [transform:translateZ(10px)] bg-bg-input/30"
            data-augmented-ui="tl-clip br-clip border inlay"
          >
-            <p className="text-2xl text-text-muted font-semibold">😢 Fim da Conexão 😢</p>
+            <p className="text-2xl text-text-muted font-semibold">😢 Você perdeu 😢</p>
          </div>
       )}
       {isTieParticipant && (
