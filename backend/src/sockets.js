@@ -686,9 +686,9 @@ export function initSockets(httpServer) { //
         const { data: itemInventario, error: checkError } = await supa
             .from('inventario') // Tabela 'inventario'
             .select(`
-                inventario_id,  // PK da tabela 'inventario'
-                qtde,           // Coluna 'qtde'
-                item ( codigo_identificador ) // Join na tabela 'item'
+                inventario_id,  
+                qtde,           
+                item ( codigo_identificador ) 
             `)
             .eq('jogador_id', usuarioJogadorId)
             .eq('item_id', powerUpId) // 'powerUpId' (do frontend) é o 'item_id' (do DB)
