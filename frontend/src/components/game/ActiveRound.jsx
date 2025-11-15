@@ -1,7 +1,7 @@
 // src/components/game/ActiveRound.jsx
 import CategoryRow from '../CategoryRow';
 import { Zap, Loader2, Star, SkipForward, Eye, Ghost } from 'lucide-react';
-import PowerUpRadialMenu from './PowerUpRadialMenu'; // <-- 1. Importa o novo componente
+// 1. IMPORTAÇÃO DO PowerUpRadialMenu REMOVIDA
 
 import MatrixRain from '../MatrixRain';
 
@@ -43,7 +43,7 @@ export default function ActiveRound({
     setActiveSkipOpponentPowerUpId(null); 
   };
 
-  // Lógica para lidar com o clique no power-up (a mesma de antes)
+  // Esta função é mantida, pois é ela que chamamos ao clicar no botão
   const onUsePowerUp = (powerUp) => {
     if (powerUp.code === 'SKIP_OWN_CATEGORY' && activeSkipPowerUpId) {
       alert("Pular Categoria já está ativo!"); return;
@@ -81,10 +81,10 @@ export default function ActiveRound({
         className="flex items-center justify-between bg-bg-secondary p-3 shadow sticky top-[72px] z-10"
         data-augmented-ui="tl-clip tr-clip br-clip bl-clip border"
       >
+        {/* ... (código do header sem alteração) ... */}
         <div className="text-sm">
             Nó <b className="font-mono text-secondary">#{salaId}</b> | ID: <b className="font-mono text-accent">{meuJogadorId}</b>
         </div>
-        {/* Timer */}
         <div className={`font-mono text-2xl font-bold tabular-nums ${timeLeft !== null && timeLeft <= 10 ? 'text-primary animate-pulse' : 'text-warning'}`}>
            ⏱ {timeLeft !== null ? `${String(Math.floor(timeLeft / 60)).padStart(2, '0')}:${String(timeLeft % 60).padStart(2, '0')}` : '--:--'}
         </div>
@@ -96,6 +96,7 @@ export default function ActiveRound({
           className="text-center bg-bg-secondary p-3 shadow"
           data-augmented-ui="tl-clip tr-clip br-clip bl-clip border inlay"
         >
+          {/* ... (código da letra sem alteração) ... */}
           <h2 className="text-2xl font-semibold text-text-header">
             Letra da Rodada: <span className="font-mono text-4xl text-accent ml-2">{letra || '?'}</span>
           </h2>
@@ -103,6 +104,7 @@ export default function ActiveRound({
 
         {/* Linhas de Categoria com Botão Skip */}
         <div className="space-y-3">
+          {/* ... (código das categorias sem alteração) ... */}
           {(temas || []).map(t => {
             const isSkipped = skippedCategories.has(t.id);
             const isDisregarded = disregardedCategories.has(t.id);
@@ -115,7 +117,6 @@ export default function ActiveRound({
                     isDisabled={isLocked || timeLeft === 0 || isSkipped || isDisregarded}
                     inputClassName={isSkipped ? 'text-text-muted/70 italic bg-bg-input/50' : (isDisregarded ? 'text-red-400/70 italic bg-red-900/30' : '')}
                   />
-                  {/* Botão de Pular */}
                   {activeSkipPowerUpId && !isSkipped && (
                        <button
                           onClick={() => onSkip(t.id)}
@@ -126,7 +127,6 @@ export default function ActiveRound({
                            <SkipForward size={20}/>
                        </button>
                   )}
-                  {/* Botão de Desconsiderar Categoria do Oponente */}
                   {activeSkipOpponentPowerUpId && (
                        <button
                           onClick={() => onSkipOpponent(t.nome)}
@@ -158,32 +158,47 @@ export default function ActiveRound({
             STOP!
           </button>
 
-          {/* --- 2. Bloco de Power-ups SUBSTITUÍDO --- */}
-          <div className="flex items-center justify-center md:justify-end flex-grow relative">
-            {!loadingInventory && (
-              <PowerUpRadialMenu
-                inventario={inventario}
-                onUsePowerUp={onUsePowerUp} // Passa a função onUsePowerUp
-                isLocked={isLocked}
-                timeLeft={timeLeft}
-              />
+          {/* --- 2. Bloco de Power-ups (Exibição Normal) --- */}
+          <div className="flex items-center justify-center md:justify-end flex-grow relative gap-2 flex-wrap">
+            
+            {/* Mostra o loader se estiver carregando */}
+            {loadingInventory && <Loader2 className="animate-spin text-secondary h-10 w-10" />}
+
+            {/* Mostra os botões se não estiver carregando */}
+            {!loadingInventory && inventario.map((p) => (
+              <button
+                key={p.power_up_id}
+                onClick={() => onUsePowerUp(p)} // Chama a função local
+                disabled={isLocked || timeLeft === 0}
+                // Usei o mesmo estilo dos botões do menu radial
+                className="flex items-center gap-2 h-10 px-4 bg-primary/90 border border-primary text-white rounded-full text-xs font-semibold shadow-lg shadow-primary/30
+                           disabled:opacity-50 disabled:cursor-not-allowed transition-transform hover:scale-110"
+                title={`${p.nome} - ${p.descricao} (x${p.quantidade})`}
+              >
+                <Zap size={14} className="flex-shrink-0" />
+                <span className="whitespace-nowrap flex-shrink-0">{p.nome}</span>
+                <span className="flex-shrink-0 bg-bg-primary text-secondary text-[10px] px-1.5 py-0.5 rounded-full ml-auto">
+                  {p.quantidade}
+                </span>
+              </button>
+            ))}
+            
+            {/* Mensagem se não tiver power-ups */}
+            {!loadingInventory && inventario.length === 0 && (
+              <p className="text-sm text-text-muted italic">Nenhum power-up</p>
             )}
-            {loadingInventory && <Loader2 className="animate-spin text-secondary h-12 w-12" />}
+
           </div>
           {/* --- Fim da substituição --- */}
 
         </div>
-
-        {/* --- INÍCIO DAS CORREÇÕES '|| {}' --- */}
-
-        {/* Área de Resultados da Rodada / Revelação / Totais */}
+        
+        {/* ... (Restante do código de placar e totais sem alteração) ... */}
         {(Object.keys(placarRodada || {}).length > 0 || revealedAnswer || revealPending) && (
           <div 
             className="mt-6 bg-bg-secondary p-4 rounded-lg shadow space-y-4"
             data-augmented-ui="tl-clip tr-clip br-clip bl-clip border inlay"
           >
-
-            {/* Seção para Resposta Revelada */}
             {revealedAnswer && (
                <div className="p-3 bg-bg-input rounded border border-secondary/50">
                    <h4 className="font-semibold text-md text-secondary flex items-center gap-1"><Eye size={16}/> Resposta Revelada!</h4>
@@ -194,14 +209,11 @@ export default function ActiveRound({
                    </p>
                </div>
             )}
-            {/* Mensagem enquanto espera a revelação */}
             {revealPending && !revealedAnswer && (
                 <div className="p-3 bg-bg-input rounded border border-secondary/50 text-center">
                    <p className="text-secondary flex items-center justify-center gap-1"><Loader2 size={16} className="animate-spin"/> Decriptando resposta do oponente...</p>
                 </div>
             )}
-
-            {/* Placar da Rodada */}
             {Object.keys(placarRodada || {}).length > 0 && (
               <div>
                 <h3 className="font-semibold text-lg mb-2 text-warning">⭐ Placar da Rodada {rodadaId} ⭐</h3>
@@ -221,8 +233,6 @@ export default function ActiveRound({
                 </div>
               </div>
             )}
-
-             {/* Totais Acumulados */}
              {Object.keys(totais || {}).length > 0 && (
                <div>
                   <h3 className="font-semibold text-lg mt-4 mb-1 text-warning">📊 Totais Acumulados</h3>
@@ -235,15 +245,11 @@ export default function ActiveRound({
                   </div>
                </div>
              )}
-
-            {/* Mensagem "Aguardando próxima rodada" */}
             {Object.keys(placarRodada || {}).length > 0 && (
                <p className="text-center mt-4 text-text-muted text-sm italic">Aguardando próximo NÓ...</p>
             )}
           </div>
         )}
-
-        {/* Totais (se o placar da rodada ainda não chegou) */}
         {(Object.keys(placarRodada || {}).length === 0 && !revealedAnswer && !revealPending && Object.keys(totais || {}).length > 0 && !finalizado && rodadaId) && (
            <div 
              className="mt-6 bg-bg-secondary p-4 rounded-lg shadow"
