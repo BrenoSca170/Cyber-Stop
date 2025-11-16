@@ -285,7 +285,9 @@ router.get('/:salaId', requireAuth, async (req, res) => {
                 jogador:jogador_id (
                     jogador_id,
                     nome_de_usuario,
-                    avatar_nome
+                    avatar_nome,
+                    personagem_nome,
+                    ranking (pontuacao_total)
                 )
             `)
             .eq('sala_id', salaId);
@@ -296,6 +298,8 @@ router.get('/:salaId', requireAuth, async (req, res) => {
             jogador_id: js.jogador.jogador_id,
             nome_de_usuario: js.jogador.nome_de_usuario,
             avatar_nome: js.jogador.avatar_nome,
+            personagem_nome: js.jogador.personagem_nome,
+            ranking: js.jogador.ranking?.pontuacao_total,
             is_creator: js.jogador.jogador_id === salaData.jogador_criador_id
         }));
 

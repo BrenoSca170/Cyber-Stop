@@ -106,7 +106,24 @@ router.get('/me', requireAuth, async (req, res) => {
     // 3. Anexou o jogador em 'req.user'
 
     // Apenas retornamos o jogador que o middleware encontrou
-    res.json({ jogador: req.user });
+    const jogador_id = req.user.jogador_id;
+
+    // Buscar estatísticas de ranking
+    const { data: rankingStats, error: rankingError } = await supa.rpc('get_ranking_stats', { p_jogador_id: jogador_id });
+
+    if (rankingError) {
+      console.error('Erro ao buscar estatísticas de ranking:', rankingError);
+      // Não impede o retorno do perfil, apenas loga o erro
+    }
+
+    const stats = rankingStats && rankingStats.length > 0 ? rankingStats[0] : { partidas_jogadas: 0, vitorias: 0, pontuacao_total: 0 };
+
+    res.json({
+      jogador: {
+        ...req.user,
+        ranking_stats: stats
+      }
+    });
 
   } catch (e) {
     // O requireAuth já trata erros 401,
@@ -145,6 +162,36 @@ router.put('/avatar', async (req, res) => {
     if (error) throw error;
 
     res.json({ success: true, avatar_nome: data.avatar_nome });
+  } catch (e) {
+    res.status(401).json({ error: 'token inválido', message: e.message });
+  }
+});
+
+router.put('/personagem', async (req, res) => {
+  try {
+    const auth = req.headers.authorization;
+    if (!auth || !auth.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'header de autorização faltando' });
+    }
+    const token = auth.split(' ')[1];
+    const payload = jwt.verify(token, JWT_SECRET);
+    const jogador_id = payload.sub;
+
+    const { personagem_nome } = req.body;
+    if (!personagem_nome) {
+      return res.status(400).json({ error: 'personagem_nome necessário' });
+    }
+
+    const { data, error } = await supa
+      .from('jogador')
+      .update({ personagem_nome: personagem_nome })
+      .eq('jogador_id', jogador_id)
+      .select('personagem_nome')
+      .single();
+
+    if (error) throw error;
+
+    res.json({ success: true, personagem_nome: data.personagem_nome });
   } catch (e) {
     res.status(401).json({ error: 'token inválido', message: e.message });
   }

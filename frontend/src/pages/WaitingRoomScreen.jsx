@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import socket from '../lib/socket';
-import { ArrowLeft, Loader2, Play, ClipboardCopy, Users } from 'lucide-react';
-import PlayerCard from '../components/PlayerCard'; // Importando o novo componente
+import { ArrowLeft, Loader2, Play, ClipboardCopy } from 'lucide-react';
+import PlayerCard from '../components/PlayerCard';
 import { useExitConfirmation } from '../hooks/useExitConfirmation';
 import ExitConfirmationModal from '../components/ExitConfirmationModal';
 import NavigationBlocker from '../components/NavigationBlocker';
@@ -17,7 +17,6 @@ function WaitingRoomScreen() {
     const [copySuccess, setCopySuccess] = useState(''); 
     const [leaving, setLeaving] = useState(false);
 
-    // Hook de confirmação de saída (lógica inalterada)
     const { 
         showModal, 
         confirmExit, 
@@ -30,7 +29,6 @@ function WaitingRoomScreen() {
         setLeaving(false);
     }); 
 
-    // --- Funções de Lógica (sem alteração) ---
     const copyToClipboard = async () => { 
         try { 
             await navigator.clipboard.writeText(salaId); 
@@ -42,6 +40,7 @@ function WaitingRoomScreen() {
             setTimeout(() => setCopySuccess(''), 2000); 
         }
     };
+
     const handleStartGame = async () => { 
         setLoading(true); 
         setError(''); 
@@ -53,6 +52,7 @@ function WaitingRoomScreen() {
             setLoading(false); 
         }
     };
+
     const handleLeaveRoom = () => { 
       handleExitClick(() => {
           setLeaving(true);
@@ -60,14 +60,14 @@ function WaitingRoomScreen() {
           navigate('/'); 
       });
     };
+
     useEffect(() => { 
         let isMounted = true; 
         let intervalId = null; 
-        let initialLoadAttempted = false; 
 
         const fetchSalaState = async (isInitial = false) => {
             if (!isMounted) return; 
-             if (isInitial) setLoading(true);
+            if (isInitial) setLoading(true);
             try { 
                 const response = await api.get(`/rooms/${salaId}`); 
                 const salaData = response.data; 
@@ -75,7 +75,6 @@ function WaitingRoomScreen() {
                     setSala(salaData); 
                     setError(''); 
                     if (salaData.status === 'in_progress') {
-                         console.log(`[Polling] Detectou status 'in_progress'. Navegando imediatamente...`);
                          if (intervalId) clearInterval(intervalId); 
                          socket.off('room:players_updated', handlePlayersUpdate);
                          socket.off('room:abandoned', handleRoomAbandoned);
@@ -85,43 +84,28 @@ function WaitingRoomScreen() {
                          return; 
                     }
                      if (salaData.status === 'terminada' || salaData.status === 'abandonada') {
-                         console.log(`Sala ${salaId} com status ${salaData.status}, voltando ao lobby.`);
                          alert(`A sala foi ${salaData.status}.`);
                          navigate('/');
                      }
                 }
             } catch (err) { 
                 console.error('Erro ao buscar estado da sala:', err); 
-                 if (isMounted) { 
+                if (isMounted) { 
                     if (err.response?.status === 404 || err.response?.status === 410) { 
-                        if (!initialLoadAttempted) {
-                            console.warn("Falha na busca inicial da sala (404/410).");
-                            setError('Conectando à sala... (tentativa 1 falhou, tentando de novo...)');
-                        } else {
-                            alert(err.response?.data?.error || 'Sala não encontrada ou abandonada.'); 
-                            navigate('/'); 
-                        }
+                        alert(err.response?.data?.error || 'Sala não encontrada ou abandonada.'); 
+                        navigate('/'); 
+                    } else { 
+                        setError('Falha ao carregar dados da sala.');
                     }
-                     else { 
-                        if (initialLoadAttempted) { 
-                           setError('Não foi possível atualizar o estado da sala. Tentando novamente...'); 
-                        } else {
-                           setError('Falha ao carregar dados da sala.');
-                           console.warn("Falha na busca inicial da sala (outro erro)."); 
-                        }
-                    }
-                 }
+                }
            } finally { 
-               if (isMounted && !initialLoadAttempted) { 
-                   initialLoadAttempted = true; 
+               if (isMounted) {
                    setLoading(false); 
-               } else if (isMounted && isInitial) {
-                    setLoading(false); 
                }
            }
         };
+
        const handlePlayersUpdate = ({ jogadores, jogadores_info }) => {
-           console.log('Recebido room:players_updated', jogadores_info);
            if (isMounted) {
                setSala(currentSala => {
                    if (!currentSala) return null; 
@@ -129,15 +113,15 @@ function WaitingRoomScreen() {
                });
            }
        };
+
        const handleRoomAbandoned = ({ message }) => {
-           console.log('Recebido room:abandoned', message);
            if (isMounted) {
                alert(message || 'O criador abandonou a sala. Voltando ao lobby.');
                navigate('/');
            }
        };
+
        const handleGameStarted = (data) => {
-            console.log("Recebido 'round:ready' ou 'round:started'. Navegando imediatamente...", data);
             if (isMounted) {
                 if (intervalId) clearInterval(intervalId);
                 socket.off('room:players_updated', handlePlayersUpdate);
@@ -147,24 +131,24 @@ function WaitingRoomScreen() {
                 navigate(`/game/${salaId}`, { replace: true }); 
             }
        };
+
        socket.on('room:players_updated', handlePlayersUpdate);
        socket.on('room:abandoned', handleRoomAbandoned);
        socket.on('round:ready', handleGameStarted); 
        socket.on('round:started', handleGameStarted);
        
        socket.emit('join-room', String(salaId)); 
-       console.log(`Socket join-room emitido para sala ${salaId}`);
        
        setTimeout(() => {
          socket.emit('join-room', String(salaId));
-         console.log(`Socket join-room re-emitido para sala ${salaId} (garantia)`);
        }, 500);
+
         fetchSalaState(true); 
         intervalId = setInterval(() => {
           fetchSalaState(false);
         }, 1000); 
+
         return () => { 
-            console.log("Limpando WaitingRoomScreen"); 
             isMounted = false; 
             if (intervalId) clearInterval(intervalId); 
            socket.off('room:players_updated', handlePlayersUpdate);
@@ -174,7 +158,6 @@ function WaitingRoomScreen() {
         };
     }, [salaId, navigate]); 
 
-    // --- Renderização com Novo Design ---
     if (loading || !sala) { 
         return ( 
              <div className="text-white text-center p-10 flex flex-col items-center justify-center gap-4 font-cyber h-screen bg-black">
@@ -188,13 +171,12 @@ function WaitingRoomScreen() {
     const jogador1 = sala?.jogadores_info?.[0];
     const jogador2 = sala?.jogadores_info?.[1];
 
-    console.log('Renderizando WaitingRoomScreen');
-    console.log('Sala:', sala);
-    console.log('Jogador 1:', jogador1);
-    console.log('Jogador 2:', jogador2);
-
     return ( 
-        <div className="relative flex flex-col items-center justify-between min-h-screen text-white p-4 font-cyber bg-black overflow-hidden">
+        <div 
+            className="relative flex flex-col items-center justify-center min-h-screen text-white p-4 font-cyber bg-cover bg-center"
+            style={{ backgroundImage: "url('/backgrounds/cyber-city.jpg')" }}
+        >
+            <div className="absolute inset-0 bg-black/50"></div>
             <NavigationBlocker 
                 shouldBlock={isInRoomOrMatch}
                 exitConfirmed={exitConfirmed}
@@ -208,7 +190,6 @@ function WaitingRoomScreen() {
                 onCancel={cancelExit}
             />
             
-            {/* Top Bar: Sair e Info da Sala */}
             <div className="w-full flex justify-between items-start p-4 absolute top-0 left-0 z-20">
                 <button
                     onClick={handleLeaveRoom} 
@@ -232,27 +213,29 @@ function WaitingRoomScreen() {
                 </div>
             </div>
 
-            {/* Matchup Section */}
-            <div className="w-full flex flex-col md:flex-row items-center justify-center md:justify-around gap-8 md:gap-0 flex-grow pt-24 md:pt-0">
+            <div className="w-full flex flex-col md:flex-row items-center justify-center md:justify-around gap-8 md:gap-0 flex-grow pt-24 md:pt-0 z-10">
                 <PlayerCard 
                     playerName={jogador1?.nome_de_usuario}
                     isHost={jogador1?.is_creator}
                     avatarNome={jogador1?.avatar_nome}
+                    personagemNome={jogador1?.personagem_nome}
+                    ranking={jogador1?.ranking}
                 />
                 
-                <div className="text-6xl lg:text-8xl font-black text-primary font-['Dena'] my-4 md:my-0 animate-pulse">
-                    VS
+                <div className="text-8xl lg:text-9xl font-black text-white font-['Dena'] my-4 md:my-0 animate-pulse" style={{ textShadow: '0 0 10px #ff00ff, 0 0 20px #ff00ff' }}>
+                    DUEL
                 </div>
 
                 <PlayerCard 
                     playerName={jogador2?.nome_de_usuario}
                     isHost={jogador2?.is_creator}
                     avatarNome={jogador2?.avatar_nome}
+                    personagemNome={jogador2?.personagem_nome}
+                    ranking={jogador2?.ranking}
                     isPlayer2
                 />
             </div>
 
-            {/* Bottom Bar: Status e Ações */}
             <div className="w-full flex flex-col items-center justify-center p-4 pb-8 absolute bottom-0 left-0 z-20">
                 {error && <p className="text-red-400 mb-4 text-center">{error}</p>} 
                 

@@ -1,46 +1,43 @@
 import { useState, useEffect } from 'react';
-// import api from '../lib/api'; // Removido import duplicado
-// (CORRIGIDO) Importa 'avatarList' (objetos) e 'DEFAULT_AVATAR' (que é o primeiro objeto da lista)
-import avatarList from '../lib/avatarList'; 
-import GlitchText from '../components/GlitchText'; 
+import avatarList from '../lib/avatarList';
+import characterList from '../lib/characterList';
+import api from '../lib/api';
+import InventoryItem from '../components/InventoryItem';
+import { Coins, User } from 'lucide-react';
 import MatrixRain from '../components/MatrixRain';
-import api from '../lib/api'; // <-- Mantido este import
-import InventoryItem from '../components/InventoryItem'; // <-- IMPORTADO O NOVO COMPONENTE
-import { Coins } from 'lucide-react'; // <-- IMPORTADO ÍCONE DE MOEDAS
 
 function ProfileScreen() {
   const [profileData, setProfileData] = useState({
     nome_de_usuario: '',
     email: '',
-    // (CORRIGIDO) Usamos o .nome do avatar padrão para o estado inicial
-    avatar_nome: avatarList.find(a => a.nome === 'default').nome, 
+    avatar_nome: 'default',
+    personagem_nome: 'default',
+    ranking_stats: {
+      partidas_jogadas: 0,
+      vitorias: 0,
+      pontuacao_total: 0,
+    },
   });
 
   const [loading, setLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false); 
-
-  // --- NOVO STATE PARA O INVENTÁRIO ---
-  // Usamos nomes de estado separados para não conflitar com 'loading' do perfil
+  const [isSaving, setIsSaving] = useState(false);
   const [inventoryItems, setInventoryItems] = useState([]);
   const [coins, setCoins] = useState(0);
   const [inventoryLoading, setInventoryLoading] = useState(true);
   const [inventoryError, setInventoryError] = useState(null);
-  // --- FIM DO NOVO STATE ---
 
-  // (REMOVIDO) Não precisamos mais disso, pois o .src já vem completo do avatarList
-  // const avatarBasePath = '/avatars/'; 
-
-  // useEffect existente para o perfil
   useEffect(() => {
     const fetchProfile = async () => {
       setLoading(true);
       try {
-        const { data } = await api.get('/auth/me'); 
+        const { data } = await api.get('/auth/me');
         if (data.jogador) {
-          if (!data.jogador.avatar_nome) {
-            data.jogador.avatar_nome = avatarList.find(a => a.nome === 'default').nome;
-          }
-          setProfileData(data.jogador);
+          setProfileData({
+            ...data.jogador,
+            avatar_nome: data.jogador.avatar_nome || 'default',
+            personagem_nome: data.jogador.personagem_nome || 'default',
+            ranking_stats: data.jogador.ranking_stats || { partidas_jogadas: 0, vitorias: 0, pontuacao_total: 0 },
+          });
         }
       } catch (error) {
         console.error('Erro ao buscar perfil:', error.message);
@@ -48,22 +45,16 @@ function ProfileScreen() {
         setLoading(false);
       }
     };
-
     fetchProfile();
   }, []);
 
-  // --- NOVO EFFECT PARA BUSCAR INVENTÁRIO ---
   useEffect(() => {
     const fetchInventory = async () => {
+      setInventoryLoading(true);
       try {
-        setInventoryLoading(true);
-        // Usamos a rota que corrigimos no shop.js [cite: UploadiaBreno/backend/routes/shop.js]
         const { data } = await api.get('/shop/inventory');
-        
-        // Os dados já vêm formatados do backend
         setInventoryItems(data.inventario || []);
         setCoins(data.moedas || 0);
-        setInventoryError(null);
       } catch (err) {
         console.error("Erro ao buscar inventário:", err);
         setInventoryError("Falha ao carregar inventário.");
@@ -71,153 +62,110 @@ function ProfileScreen() {
         setInventoryLoading(false);
       }
     };
-
     fetchInventory();
-  }, []); // Roda uma vez quando o componente monta
-  // --- FIM DO NOVO EFFECT ---
+  }, []);
 
-  const handleRandomAvatar = async () => {
-    // (CORRIGIDO) Usa 'avatarList'
-    if (isSaving || avatarList.length === 0) return;
+  const handleRandomSelect = async (type) => {
+    if (isSaving) return;
     setIsSaving(true);
-    
-    let newAvatarName = profileData.avatar_nome;
-
-    // (CORRIGIDO) Usa 'avatarList'
-    if (avatarList.length > 1) {
+    const list = type === 'avatar' ? avatarList : characterList;
+    const currentName = profileData[`${type}_nome`];
+    let newName = currentName;
+    if (list.length > 1) {
       do {
-        const randomIndex = Math.floor(Math.random() * avatarList.length);
-        // (CORRIGIDO) Pega apenas o .nome do objeto sorteado
-        newAvatarName = avatarList[randomIndex].nome;
-      } while (newAvatarName === profileData.avatar_nome);
-    } else if (avatarList.length === 1) {
-        // (CORRIGIDO) Pega apenas o .nome
-      newAvatarName = avatarList[0].nome;
+        const randomIndex = Math.floor(Math.random() * list.length);
+        newName = list[randomIndex].nome;
+      } while (newName === currentName);
+    } else if (list.length === 1) {
+      newName = list[0].nome;
     }
-    
-    // (CORRIGIDO) Atualiza o estado com o novo nome
-    setProfileData((prev) => ({ ...prev, avatar_nome: newAvatarName }));
-
+    setProfileData((prev) => ({ ...prev, [`${type}_nome`]: newName }));
     try {
-      // (CORRIGIDO) Envia apenas o nome para a API
-      await api.put('/auth/avatar', { avatar_nome: newAvatarName });
+      await api.put(`/auth/${type}`, { [`${type}_nome`]: newName });
     } catch (error) {
-      console.error('Erro ao salvar avatar:', error.message);
+      console.error(`Erro ao salvar ${type}:`, error.message);
+      setProfileData((prev) => ({ ...prev, [`${type}_nome`]: currentName }));
     } finally {
       setIsSaving(false);
     }
   };
 
-  // (NOVO) Encontra o objeto do avatar atual para pegar o .src correto
-  const currentAvatar = avatarList.find(
-    avatar => avatar.nome === profileData.avatar_nome
-  ) || avatarList.find(a => a.nome === 'default');
-
-  // --- NOVA FUNÇÃO HELPER PARA RENDERIZAR O INVENTÁRIO ---
-  const renderInventory = () => {
-    if (inventoryLoading) {
-      return <p className="text-gray-400 text-sm">Carregando power-ups...</p>;
-    }
-    if (inventoryError) {
-      return <p className="text-red-500 text-sm">{inventoryError}</p>;
-    }
-    if (inventoryItems.length === 0) {
-      return <p className="text-gray-400 text-sm">Nenhum power-up no inventário.</p>;
-    }
-    return (
-      // Grid responsiva para os power-ups
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {inventoryItems.map((item) => (
-          // Usamos 'power_up_id' que o backend agora envia
-          <InventoryItem key={item.power_up_id} item={item} />
-        ))}
-      </div>
-    );
-  };
-  // --- FIM DA FUNÇÃO HELPER ---
-
+  const currentAvatar = avatarList.find(a => a.nome === profileData.avatar_nome) || avatarList.find(a => a.nome === 'default');
+  const currentPersonagem = characterList.find(c => c.nome === profileData.personagem_nome) || characterList.find(c => c.nome === 'default');
 
   return (
-    <div className="flex justify-center items-center min-h-screen p-4 sm:p-8 text-white">
-      <MatrixRain className='z-0' />
-      <div className="w-full max-w-md p-6 sm:p-8 bg-gray-800 rounded-lg shadow-2xl border border-gray-700 z-10 opacity-95 overflow-y-auto max-h-[90vh]">
+    <div className="relative flex items-center justify-center h-screen text-white font-cyber overflow-hidden">
+      <MatrixRain className="absolute inset-0 z-0" />
+      <div className="absolute inset-0 bg-black/70 z-0"></div>
+      
+      <div className="relative z-10 w-full max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6 p-6">
         
-        <GlitchText text="Meu perfil" fontSize={2} color="rgb(57, 255, 20)" fontWeight="bold" textAlign="center" font="https://fonts.gstatic.com/s/orbitron/v35/yMJMMIlzdpvBhQQL_SC3X9yhF25-T1ny_Cmxpg.ttf" />
-        
-        <div className="flex flex-col items-center mb-8">
-          
-          <div className="relative w-32 h-32 md:w-40 md:h-40">
+        {/* Coluna Esquerda: Identidade */}
+        <div 
+          className="md:col-span-1 flex flex-col items-center p-4 border-2 border-red-500 bg-black/50"
+          data-augmented-ui="tl-clip tr-clip br-clip bl-clip border"
+        >
+          <h2 className="text-2xl font-bold text-green-400 uppercase tracking-widest mb-4">Identidade</h2>
+          <div className="relative w-40 h-40 mb-4">
+            <div className="absolute inset-0 rounded-full border-4 border-red-500 animate-pulse"></div>
             <img
-              // (CORRIGIDO) Usa o .src do objeto do avatar encontrado
-              src={currentAvatar.url} 
-              alt="Avatar Atual"
-              className="w-full h-full rounded-full bg-gray-700 border-4 border-blue-500 object-cover shadow-lg shadow-blue-500/30"
+              src={currentAvatar.url || '/avatars/default.png'}
+              alt="Avatar"
+              className="w-full h-full rounded-full object-cover p-1"
             />
-            <div className="absolute inset-0 rounded-full border border-white/10 animate-pulse"></div>
           </div>
-          
-          <button
-            onClick={handleRandomAvatar}
-            disabled={isSaving || loading}
-            className="mt-4 p-2 rounded-full cursor-target text-blue-400 hover:text-white hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 transition-all duration-200 disabled:text-gray-600 disabled:bg-transparent disabled:cursor-not-allowed"
-            aria-label="Sortear novo avatar" 
-          >
-            <svg 
-              xmlns="http://www.w3.org/2000/svg" 
-              className={`h-8 w-8 ${isSaving ? 'animate-spin' : ''}`} 
-              fill="none" 
-              viewBox="0 0 24 24" 
-              stroke="currentColor" 
-              strokeWidth={2}
-            >
-              <path 
-                strokeLinecap="round" 
-                strokeLinejoin="round" 
-                d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.992 0l3.181 3.183a8.25 8.25 0 0013.803-3.183M4.031 9.348a8.25 8.25 0 0113.803-3.183l3.181 3.183m-4.992-4.992v4.992m0 0H9.345" 
-              />
-            </svg>
+          <div className="w-full p-2 mb-4 text-center border border-red-500 bg-black/30">
+            <p className="text-sm"><span className="font-bold">Usuário:</span> {profileData.nome_de_usuario}</p>
+            <p className="text-sm"><span className="font-bold">Email:</span> {profileData.email}</p>
+          </div>
+          <button onClick={() => handleRandomSelect('avatar')} disabled={isSaving} className="w-full bg-cyan-500 text-black font-bold py-2 hover:bg-cyan-400 transition-colors">
+            {isSaving ? 'Salvando...' : 'Mudar Avatar'}
           </button>
         </div>
 
-        {/* --- SEÇÃO DE INVENTÁRIO ADICIONADA --- */}
-        <div className="mb-8">
-          <label className="block text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">
-            Inventário
-          </label>
-          
-          {/* Moedas */}
-          <div className="flex items-center gap-3 mt-1 block w-full rounded-md border-gray-600 bg-gray-900 p-3 shadow-sm sm:text-lg text-white font-mono mb-4">
-            <Coins size={20} className="text-blue-400" />
-            <span>Moedas:</span>
-            <span className="text-blue-400">
-              {inventoryLoading ? '...' : coins}
-            </span>
+        {/* Coluna Central: Perfil */}
+        <div 
+          className="md:col-span-1 flex flex-col items-center p-4 border-2 border-purple-500 bg-black/50"
+          data-augmented-ui="tl-clip tr-clip br-clip bl-clip border"
+        >
+          <h2 className="text-2xl font-bold text-purple-400 uppercase tracking-widest mb-4">Perfil</h2>
+          <div className="relative w-full h-80 mb-4">
+            <img
+              src={currentPersonagem.url || '/characters/default.png'}
+              alt="Personagem"
+              className="w-full h-full object-contain"
+            />
           </div>
-
-          {/* Power-ups */}
-          {renderInventory()}
+          <button onClick={() => handleRandomSelect('personagem')} disabled={isSaving} className="w-full bg-cyan-500 text-black font-bold py-2 hover:bg-cyan-400 transition-colors">
+            {isSaving ? 'Salvando...' : 'Mudar Personagem'}
+          </button>
         </div>
-        {/* --- FIM DA SEÇÃO DE INVENTÁRIO --- */}
 
-        <div className="space-y-6 mb-10">
-          <div>
-            <label className="block text-sm font-medium text-gray-400 uppercase tracking-wider">
-              Nome de Usuário
-            </label>
-            <div className="mt-1 block w-full rounded-md border-gray-600 bg-gray-900 p-3 shadow-sm sm:text-lg text-white font-mono cursor-target">
-              {profileData.nome_de_usuario || (loading ? 'Carregando...' : 'N/A')}
+        {/* Coluna Direita: Status e Inventário */}
+        <div className="md:col-span-1 flex flex-col justify-between">
+          <div 
+            className="w-full p-4 border-2 border-red-500 bg-black/50 mb-6"
+            data-augmented-ui="tl-clip tr-clip br-clip bl-clip border"
+          >
+            <h2 className="text-2xl font-bold text-red-400 uppercase tracking-widest mb-4">Status</h2>
+            <div className="text-base space-y-2">
+              <p><span className="font-bold">Partidas Jogadas:</span> {profileData.ranking_stats.partidas_jogadas}</p>
+              <p><span className="font-bold">Vitórias:</span> {profileData.ranking_stats.vitorias}</p>
+              <p><span className="font-bold">Pontuação Total:</span> {profileData.ranking_stats.pontuacao_total}</p>
             </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-400 uppercase tracking-wider">
-              Email
-            </label>
-            <div className="mt-1 block w-full rounded-md border-gray-600 bg-gray-900 p-3 text-gray-400 shadow-sm sm:text-lg font-mono cursor-target">
-              {profileData.email || (loading ? 'Carregando...' : 'N/A')}
+          <div 
+            className="w-full p-4 border-2 border-red-500 bg-black/50 flex-grow"
+            data-augmented-ui="tl-clip tr-clip br-clip bl-clip border"
+          >
+            <h2 className="text-2xl font-bold text-red-400 uppercase tracking-widest mb-4">Inventario</h2>
+            <div className="overflow-y-auto h-48 pr-2">
+              {inventoryLoading ? <p>Carregando...</p> : inventoryItems.map(item => <InventoryItem key={item.power_up_id} item={item} />)}
+              {inventoryError && <p className="text-red-500">{inventoryError}</p>}
             </div>
           </div>
         </div>
-        
+
       </div>
     </div>
   );

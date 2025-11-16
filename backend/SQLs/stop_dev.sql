@@ -84,6 +84,7 @@ CREATE TABLE public.jogador (
   data_hora_criacao timestamp with time zone NOT NULL DEFAULT (now() AT TIME ZONE 'utc'::text),
   data_hora_ultima_vez_online timestamp with time zone,
   avatar_nome text,
+  personagem_nome text,
   CONSTRAINT jogador_pkey PRIMARY KEY (jogador_id)
 );
 CREATE TABLE public.jogador_duplicate (
