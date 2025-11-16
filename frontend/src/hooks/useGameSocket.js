@@ -67,7 +67,10 @@ export function useGameSocket(salaId) {
       // --- FIM DA MUDANÇA ---
     };
 
-    const onTick = (t) => { setTimeLeft(t); };
+    const onTick = (t) => {
+      console.log(`[FRONTEND-TICK] Received timeLeft=${t} at ${new Date().toISOString()}`);
+      setTimeLeft(t);
+    };
 
     // --- MUDANÇA IMPORTANTE: O onEnd agora controla a tela de resultados ---
     const onEnd = (payload) => {
@@ -116,7 +119,10 @@ export function useGameSocket(salaId) {
         // marca cooldown para evitar reaberturas imediatas
         jumpscareCooldownRef.current = now + COOLDOWN_MS;
 
-        console.log(`[useGameSocket] effect:jumpscare recebido de ${attackerId} - aplicando (ignorar por ${COOLDOWN_MS}ms).`);
+        console.log(`[JUMPSCARE-RECEIVED] attackerId=${attackerId} timestamp=${new Date().toISOString()}`);
+        console.log(`[JUMPSCARE-COOLDOWN] Set cooldown until ${new Date(jumpscareCooldownRef.current).toISOString()}`);
+        console.log(`[JUMPSCARE-GAMESTATE] currentTimeLeft=${timeLeft} isLocked=${isLocked} rodadaId=${rodadaId}`);
+
         // Ajuste: envia duration preferencialmente 2 (mas overlay força 2s de qualquer forma)
         setJumpscareData({ attackerId, image, sound, duration: 2 });
         setShowJumpscare(true);
@@ -157,7 +163,8 @@ export function useGameSocket(salaId) {
     };
     
     const onStopping = async ({ roundId }) => {
-      console.log("round:stopping recebido:", roundId);
+      console.log(`[STOPPING-RECEIVED] roundId=${roundId} timestamp=${new Date().toISOString()}`);
+      console.log(`[STOPPING-STATE] currentTimeLeft=${timeLeft} before locking`);
       setIsLocked(true);
     };
     
@@ -212,10 +219,28 @@ export function useGameSocket(salaId) {
       }
     };
 
-    if (socket.connected) {
-      fetchCurrentRound();
+    // Garante que o socket está conectado e operacional
+    console.log('[useGameSocket] Status do socket:', {
+      connected: socket.connected,
+      id: socket.id,
+      active: socket.active
+    });
+
+    if (!socket.connected || !socket.id) {
+      console.log('[useGameSocket] Socket não conectado ou sem ID. Conectando...');
+      // Força desconexão primeiro para garantir conexão limpa
+      if (socket.connected) {
+        socket.disconnect();
+      }
+      socket.connect();
+      // Aguarda conexão antes de buscar rodada
+      socket.once('connect', () => {
+        console.log('[useGameSocket] Socket conectado com sucesso! ID:', socket.id);
+        fetchCurrentRound();
+      });
     } else {
-      socket.once('connect', fetchCurrentRound);
+      console.log('[useGameSocket] Socket já conectado. Buscando rodada atual...');
+      fetchCurrentRound();
     }
 
 

@@ -41,15 +41,19 @@ export default function NavigationBlocker({ shouldBlock, onBlock, exitConfirmed 
   useEffect(() => {
     if (exitCancelled && blocker && blocker.state === 'blocked') {
       // Reseta o blocker quando foi cancelado
-      if (blockerResetFnRef.current) {
-        const resetFn = blockerResetFnRef.current;
-        blockerResetFnRef.current = null;
-        resetFn();
-      } else if (blocker.reset) {
-        blocker.reset();
-      } else {
-        // Fallback: prossegue mas não executa a ação (já foi limpa)
-        blocker.proceed();
+      try {
+        if (blockerResetFnRef.current) {
+          const resetFn = blockerResetFnRef.current;
+          blockerResetFnRef.current = null;
+          resetFn();
+        } else if (blocker.reset) {
+          blocker.reset();
+        } else {
+          // Fallback: prossegue mas não executa a ação (já foi limpa)
+          blocker.proceed();
+        }
+      } catch (error) {
+        console.warn('[NavigationBlocker] Erro ao cancelar navegação (blocker já pode ter mudado de estado):', error);
       }
       lastBlockedRef.current = false;
     }
@@ -58,7 +62,12 @@ export default function NavigationBlocker({ shouldBlock, onBlock, exitConfirmed 
   // Efeito específico para quando foi confirmado: prossegue com a navegação
   useEffect(() => {
     if (exitConfirmed && blocker && blocker.state === 'blocked') {
-      blocker.proceed();
+      // Garante que o blocker ainda está bloqueado antes de prosseguir
+      try {
+        blocker.proceed();
+      } catch (error) {
+        console.warn('[NavigationBlocker] Erro ao prosseguir com navegação (já pode ter sido desbloqueada):', error);
+      }
       lastBlockedRef.current = false;
       blockerResetFnRef.current = null;
     }
@@ -80,19 +89,33 @@ export default function NavigationBlocker({ shouldBlock, onBlock, exitConfirmed 
     if (blocker && blocker.state === 'blocked' && onBlock) {
       // Cria função para prosseguir
       const proceedFn = () => {
-        blocker.proceed();
+        // Verifica se o blocker ainda está bloqueado antes de prosseguir
+        if (blocker.state === 'blocked') {
+          try {
+            blocker.proceed();
+          } catch (error) {
+            console.warn('[NavigationBlocker] Erro ao prosseguir (blocker já pode ter mudado de estado):', error);
+          }
+        }
         lastBlockedRef.current = false;
         blockerResetFnRef.current = null;
       };
       
       // Cria função para resetar (cancelar)
       const resetFn = () => {
-        // Tenta resetar o blocker
-        if (blocker.reset) {
-          blocker.reset();
-        } else {
-          // Fallback: prossegue (mas a ação não será executada porque pendingAction será limpa)
-          blocker.proceed();
+        // Só reseta se ainda está bloqueado
+        if (blocker.state === 'blocked') {
+          try {
+            // Tenta resetar o blocker
+            if (blocker.reset) {
+              blocker.reset();
+            } else {
+              // Fallback: prossegue (mas a ação não será executada porque pendingAction será limpa)
+              blocker.proceed();
+            }
+          } catch (error) {
+            console.warn('[NavigationBlocker] Erro ao resetar blocker (já pode ter mudado de estado):', error);
+          }
         }
         lastBlockedRef.current = false;
         blockerResetFnRef.current = null;

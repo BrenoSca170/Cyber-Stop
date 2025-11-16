@@ -59,8 +59,8 @@ export function useExitConfirmation(salaId, matchStarted = false, onExitConfirme
       if (pendingAction) {
         const action = pendingAction;
         setPendingAction(null);
-        // Executa após um pequeno delay para garantir que o modal fechou
-        setTimeout(() => action(), 100);
+        // Executa após um delay mínimo para garantir que o modal fechou
+        setTimeout(() => action(), 10);
       }
       return;
     }
@@ -78,8 +78,9 @@ export function useExitConfirmation(salaId, matchStarted = false, onExitConfirme
       if (pendingAction) {
         const action = pendingAction;
         setPendingAction(null);
-        // Executa após um pequeno delay para garantir que tudo foi processado
-        setTimeout(() => action(), 100);
+        // Executa após um delay mínimo para garantir que o modal fechou
+        // Reduzido de 100ms para 10ms para minimizar race conditions com o blocker
+        setTimeout(() => action(), 10);
       }
     } catch (error) {
       console.error('Erro ao sair da sala:', error);

@@ -1,8 +1,8 @@
 // src/pages/AuthScreen.jsx - REFATORADO PARA USAR O BACKEND NODE.JS
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 // Importamos o cliente de API correto (o mesmo da Loja)
-import api from '../lib/api'; 
+import api from '../lib/api';
 import { useNavigate } from 'react-router-dom';
 
 
@@ -10,14 +10,57 @@ function AuthScreen() {
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  
+
   // Estado extra para o cadastro
-  const [nomeDeUsuario, setNomeDeUsuario] = useState(''); 
-  
+  const [nomeDeUsuario, setNomeDeUsuario] = useState('');
+
   const [isLogin, setIsLogin] = useState(true);
   const [message, setMessage] = useState('');
-  
+
   const navigate = useNavigate();
+
+  // Ref para o áudio de fundo
+  const audioRef = useRef(null);
+
+  // Inicializa o áudio de fundo quando o componente monta
+  useEffect(() => {
+    // Cria elemento de áudio
+    const audio = new Audio('/login-music.mp3');
+    audio.loop = true; // Loop infinito
+    audio.volume = 0.5; // Volume 50%
+    audioRef.current = audio;
+
+    // Tenta tocar automaticamente
+    const playAudio = async () => {
+      try {
+        await audio.play();
+        console.log('[AuthScreen] Música de fundo iniciada');
+      } catch (error) {
+        console.log('[AuthScreen] Autoplay bloqueado pelo navegador. Clique na página para iniciar a música.', error);
+        // Se o autoplay for bloqueado, tenta tocar no primeiro clique do usuário
+        const handleFirstClick = async () => {
+          try {
+            await audio.play();
+            console.log('[AuthScreen] Música iniciada após interação do usuário');
+            document.removeEventListener('click', handleFirstClick);
+          } catch (err) {
+            console.error('[AuthScreen] Erro ao tocar música:', err);
+          }
+        };
+        document.addEventListener('click', handleFirstClick);
+      }
+    };
+
+    playAudio();
+
+    // Cleanup: para a música quando sair da tela de login
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+    };
+  }, []);
 
   const handleAuth = async (event) => {
     event.preventDefault();

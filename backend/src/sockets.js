@@ -219,6 +219,7 @@ export function scheduleRoundCountdown({ salaId, roundId, duration = 20 }) { //
   // Limpa timer anterior ANTES de setar novo
   clearTimerForSala(salaId); //
   console.log(`[TIMER] Scheduling countdown for sala ${salaId}, round ${roundId}, duration ${duration}s`);
+  console.log(`[TIMER-SCHED] endsAt will be ${new Date(Date.now() + duration * 1000).toISOString()}`);
 
   const endsAt = Date.now() + duration * 1000; //
   const interval = setInterval(async () => { //
@@ -233,6 +234,7 @@ export function scheduleRoundCountdown({ salaId, roundId, duration = 20 }) { //
     const now = Date.now(); //
     const left = Math.max(0, Math.ceil((endsAt - now) / 1000)); //
 
+    console.log(`[TIMER-TICK] sala=${salaId} round=${roundId} timeLeft=${left}s endsAt=${new Date(endsAt).toISOString()}`);
     io.to(salaId).emit('round:tick', left); //
 
     if (left <= 0) { //
@@ -744,6 +746,9 @@ export function initSockets(httpServer) { //
                   sound: random.sound,
                   duration: 3
               });
+
+              console.log(`[JUMPSCARE-EMITTED] sala=${salaId} round=${currentRoundId} by=${usuarioJogadorId} at time=${new Date().toISOString()}`);
+              console.log(`[JUMPSCARE-TIMER-STATE] endsAt=${roomTimers.get(salaId)?.endsAt} roundId=${roomTimers.get(salaId)?.roundId}`);
 
               // mensagem de sucesso
               socket.emit('powerup:ack', {
