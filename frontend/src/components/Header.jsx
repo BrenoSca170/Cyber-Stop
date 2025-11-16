@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Gem, User, LogOut } from 'lucide-react';
-import { avatarList } from '../lib/avatarList';
+import avatarList from '../lib/avatarList';
 import api from '../lib/api';
 import socket from '../lib/socket';
 import { useExitConfirmation } from '../hooks/useExitConfirmation';
@@ -194,7 +194,7 @@ export default function Header() {
   // se não está logado, não renderiza header
   if (!user) return null;
 
-  const userAvatar = avatarList.find(a => a.nome === user?.avatar_nome) || avatarList[0];
+  const userAvatar = avatarList.find(a => a.id === user?.avatar_id) || avatarList.find(a => a.id === 'default');
 
   // Ocultar moedas se estiver na rota /shop ou suas subrotas
   const isOnShopScreen = location.pathname.startsWith('/shop');
@@ -238,7 +238,7 @@ export default function Header() {
           {/* Perfil do Usuário */}
           <div className="flex items-center gap-2">
             <img
-              src={userAvatar.src}
+              src={userAvatar.url}
               alt="Avatar"
               className="h-10 w-10 rounded-full border-2 border-primary/50 object-cover"
             />

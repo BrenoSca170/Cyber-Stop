@@ -3,9 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import socket from '../lib/socket';
 import { ArrowLeft, Loader2, Play, ClipboardCopy, Users } from 'lucide-react';
-import LetterGlitch from '../components/LetterGlitch';
-import PixelBlast from '../components/PixelBlast';
-import Hyperspeed from '../components/Hyperspeed';
+import PlayerCard from '../components/PlayerCard'; // Importando o novo componente
 import { useExitConfirmation } from '../hooks/useExitConfirmation';
 import ExitConfirmationModal from '../components/ExitConfirmationModal';
 import NavigationBlocker from '../components/NavigationBlocker';
@@ -19,7 +17,7 @@ function WaitingRoomScreen() {
     const [copySuccess, setCopySuccess] = useState(''); 
     const [leaving, setLeaving] = useState(false);
 
-    // Hook de confirmação de saída
+    // Hook de confirmação de saída (lógica inalterada)
     const { 
         showModal, 
         confirmExit, 
@@ -29,13 +27,8 @@ function WaitingRoomScreen() {
         exitConfirmed,
         exitCancelled
     } = useExitConfirmation(salaId, false, () => {
-        // Callback quando a saída é confirmada
         setLeaving(false);
     }); 
-
-    // ... (Todas as funções: copyToClipboard, handleStartGame, handleLeaveRoom) ...
-    // ... (Toda a lógica dentro do useEffect) ...
-    // NENHUMA LÓGICA PRECISA MUDAR.
 
     // --- Funções de Lógica (sem alteração) ---
     const copyToClipboard = async () => { 
@@ -61,11 +54,9 @@ function WaitingRoomScreen() {
         }
     };
     const handleLeaveRoom = () => { 
-      // Apenas intercepta a saída - a API será chamada pelo confirmExit
       handleExitClick(() => {
           setLeaving(true);
           setError('');
-          // A navegação será feita após a confirmação e chamada da API
           navigate('/'); 
       });
     };
@@ -90,7 +81,6 @@ function WaitingRoomScreen() {
                          socket.off('room:abandoned', handleRoomAbandoned);
                          socket.off('round:ready', handleGameStarted);
                          socket.off('round:started', handleGameStarted);
-                         // Navega imediatamente quando detecta in_progress
                          navigate(`/game/${salaId}`, { replace: true }); 
                          return; 
                     }
@@ -130,12 +120,12 @@ function WaitingRoomScreen() {
                }
            }
         };
-       const handlePlayersUpdate = ({ jogadores }) => {
-           console.log('Recebido room:players_updated', jogadores);
+       const handlePlayersUpdate = ({ jogadores, jogadores_info }) => {
+           console.log('Recebido room:players_updated', jogadores_info);
            if (isMounted) {
                setSala(currentSala => {
                    if (!currentSala) return null; 
-                   return { ...currentSala, jogadores: jogadores };
+                   return { ...currentSala, jogadores: jogadores, jogadores_info: jogadores_info };
                });
            }
        };
@@ -157,26 +147,22 @@ function WaitingRoomScreen() {
                 navigate(`/game/${salaId}`, { replace: true }); 
             }
        };
-       // Registra listeners ANTES de entrar na sala
        socket.on('room:players_updated', handlePlayersUpdate);
        socket.on('room:abandoned', handleRoomAbandoned);
        socket.on('round:ready', handleGameStarted); 
        socket.on('round:started', handleGameStarted);
        
-       // Garante que o socket está na sala
        socket.emit('join-room', String(salaId)); 
        console.log(`Socket join-room emitido para sala ${salaId}`);
        
-       // Re-emite join-room após um pequeno delay para garantir conexão
        setTimeout(() => {
          socket.emit('join-room', String(salaId));
          console.log(`Socket join-room re-emitido para sala ${salaId} (garantia)`);
        }, 500);
         fetchSalaState(true); 
-        // Polling mais frequente (1s) para detectar início mais rápido
         intervalId = setInterval(() => {
           fetchSalaState(false);
-        }, 1000); // Polling a cada 1 segundo 
+        }, 1000); 
         return () => { 
             console.log("Limpando WaitingRoomScreen"); 
             isMounted = false; 
@@ -188,151 +174,120 @@ function WaitingRoomScreen() {
         };
     }, [salaId, navigate]); 
 
-    // --- Renderização com Alterações ---
+    // --- Renderização com Novo Design ---
     if (loading || !sala) { 
         return ( 
-             <div className="text-white text-center p-10 flex flex-col items-center justify-center gap-4 font-cyber">
-               <Loader2 className="animate-spin h-10 w-10 text-secondary" /> 
-               <p>Acessando Nó #{salaId}...</p> 
-               {error && <p className="text-warning mt-2">{error}</p>} 
+             <div className="text-white text-center p-10 flex flex-col items-center justify-center gap-4 font-cyber h-screen bg-black">
+               <Loader2 className="animate-spin h-12 w-12 text-secondary" /> 
+               <p className="text-xl">Acessando Nó de Batalha #{salaId}...</p> 
+               {error && <p className="text-warning mt-4 text-lg">{error}</p>} 
              </div>
         );
     }
 
+    const jogador1 = sala?.jogadores_info?.[0];
+    const jogador2 = sala?.jogadores_info?.[1];
+
+    console.log('Renderizando WaitingRoomScreen');
+    console.log('Sala:', sala);
+    console.log('Jogador 1:', jogador1);
+    console.log('Jogador 2:', jogador2);
+
     return ( 
-        <div className="relative flex flex-col items-center justify-center min-h-[calc(100vh-120px)] text-white p-4 font-cyber [perspective:1000px]">
-            {/* Bloqueador de navegação */}
+        <div className="relative flex flex-col items-center justify-between min-h-screen text-white p-4 font-cyber bg-black overflow-hidden">
             <NavigationBlocker 
                 shouldBlock={isInRoomOrMatch}
                 exitConfirmed={exitConfirmed}
                 exitCancelled={exitCancelled}
                 showModal={showModal}
-                onBlock={(proceed, reset) => {
-                    handleExitClick(proceed, reset);
-                }}
+                onBlock={(proceed, reset) => handleExitClick(proceed, reset)}
             />
-            
-            {/* Modal de confirmação de saída */}
             <ExitConfirmationModal 
                 isOpen={showModal}
                 onConfirm={confirmExit}
                 onCancel={cancelExit}
             />
             
-            <PixelBlast className="relative inset-0 w-full h-full z-0" />
-            <div className="absolute z-10 w-full max-w-2xl mx-auto">
-                {/* Botão Sair */}
+            {/* Top Bar: Sair e Info da Sala */}
+            <div className="w-full flex justify-between items-start p-4 absolute top-0 left-0 z-20">
                 <button
                     onClick={handleLeaveRoom} 
                     disabled={leaving} 
-                    className="absolute top-4 left-4 md:top-6 md:left-6 text-text-muted hover:text-primary transition-colors cursor-target flex items-center gap-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed" 
+                    className="text-text-muted hover:text-primary transition-colors cursor-target flex items-center gap-2 text-md disabled:opacity-50" 
                     title="Sair da sala" 
                 >
-                    {leaving ? <Loader2 size={16} className="animate-spin" /> : <ArrowLeft size={16} />} 
-                    {leaving ? 'Desconectando...' : 'Voltar ao Lobby'} 
+                    {leaving ? <Loader2 size={20} className="animate-spin" /> : <ArrowLeft size={20} />} 
+                    {leaving ? 'Saindo...' : 'Sair'} 
                 </button>
-
-                {/* Cabeçalho da Sala */}
-                 <div className="text-center mb-8 pt-8 md:pt-4">
-                    <h1 className="text-3xl md:text-4xl font-bold mb-2 text-accent">{sala.nome_sala}</h1> 
-
-                    {/* ID da Sala para compartilhar (estilizado) */}
-                    <div className="flex items-center justify-center gap-2 mt-3 mb-2"> 
-                        <span className="text-text-muted">ID do Nó:</span> 
-                        <span className="text-2xl font-mono text-warning bg-black/50 px-3 py-1 rounded border border-dashed border-warning/50"> 
-                            {salaId} 
-                        </span>
+                <div className="text-right">
+                    <h1 className="text-2xl font-bold text-accent">{sala.nome_sala}</h1>
+                    <div className="flex items-center justify-end gap-2 mt-1"> 
+                        <span className="text-text-muted text-sm">ID:</span> 
+                        <span className="text-lg font-mono text-warning">{salaId}</span>
                         <button onClick={copyToClipboard} title="Copiar ID" className="text-text-muted hover:text-warning transition-colors cursor-target p-1"> 
-                            <ClipboardCopy size={20}/> 
+                            <ClipboardCopy size={18}/> 
                         </button>
                     </div>
-                    {copySuccess && <p className="text-xs text-accent h-4">{copySuccess}</p>} 
+                    {copySuccess && <p className="text-xs text-accent h-4 mt-1">{copySuccess}</p>} 
+                </div>
+            </div>
 
-                    <p className="text-text-muted mt-2 text-sm">Host: {sala.jogador?.nome_de_usuario || 'Desconhecido'}</p> 
-                     <p className={`mt-1 text-sm font-semibold ${
-                          sala.status === 'waiting' ? 'text-warning'
-                        : sala.status === 'in_progress' ? 'text-accent'
-                        : sala.status === 'terminada' ? 'text-secondary'
-                        : sala.status === 'abandonada' ? 'text-primary'
-                        : 'text-text-muted' 
-                     }`}> 
-                        Status: {
-                            sala.status === 'waiting' ? 'Aguardando Conexões...'
-                          : sala.status === 'in_progress' ? 'Em Jogo'
-                          : sala.status === 'terminada' ? 'Partida Terminada'
-                          : sala.status === 'abandonada' ? 'Nó Abandonado'
-                          : sala.status 
-                        } 
-                     </p>
-                     {error && <p className="text-red-400 mt-2 text-sm">{error}</p>} 
+            {/* Matchup Section */}
+            <div className="w-full flex flex-col md:flex-row items-center justify-center md:justify-around gap-8 md:gap-0 flex-grow pt-24 md:pt-0">
+                <PlayerCard 
+                    playerName={jogador1?.nome_de_usuario}
+                    isHost={jogador1?.is_creator}
+                    avatarNome={jogador1?.avatar_nome}
+                />
+                
+                <div className="text-6xl lg:text-8xl font-black text-primary font-['Dena'] my-4 md:my-0 animate-pulse">
+                    VS
                 </div>
 
-                {/* Lista de Jogadores (com augmented-ui) */}
-                <div 
-                  className="bg-bg-secondary p-4 md:p-6 mb-8 [transform-style:preserve-3d]"
-                  data-augmented-ui="tl-clip tr-clip br-clip bl-clip border"
-                >
-                    <h2 className="text-xl md:text-2xl font-semibold mb-4 flex items-center gap-2 text-secondary [transform:translateZ(10px)]"> 
-                       <Users size={24} /> Conexões ({sala.jogadores?.length || 0}/2) 
-                    </h2>
-                    <ul className="space-y-2 max-h-60 overflow-y-auto pr-2 [transform:translateZ(10px)]"> 
-                        {(sala.jogadores || []).map((nome, index) => ( 
-                           <li key={index} className="text-base md:text-lg bg-bg-input px-3 py-1.5 rounded flex items-center gap-2 border border-transparent"> 
-                              <span className={`h-2 w-2 rounded-full ${index === 0 ? 'bg-warning shadow-glow-warning' : 'bg-secondary shadow-glow-secondary'}`}></span> 
-                              {nome} 
-                              {index === 0 && <span className="text-xs text-warning font-semibold ml-auto">(Host)</span>} 
-                           </li>
-                        ))}
-                         {sala.jogadores?.length === 0 && !loading && <li className="text-text-muted/70 italic">Nenhuma conexão ainda.</li>} 
-                    </ul>
-                </div>
+                <PlayerCard 
+                    playerName={jogador2?.nome_de_usuario}
+                    isHost={jogador2?.is_creator}
+                    avatarNome={jogador2?.avatar_nome}
+                    isPlayer2
+                />
+            </div>
 
-                {/* Botão de Iniciar Partida ou Mensagem de Espera */}
+            {/* Bottom Bar: Status e Ações */}
+            <div className="w-full flex flex-col items-center justify-center p-4 pb-8 absolute bottom-0 left-0 z-20">
+                {error && <p className="text-red-400 mb-4 text-center">{error}</p>} 
+                
                 {sala.status === 'waiting' && ( 
-                    <div className="mt-8 md:mt-6 text-center [transform-style:preserve-3d]">
-                        {sala.is_creator && ( 
+                    <div className="text-center">
+                        {sala.is_creator ? ( 
                             <button
                                 onClick={handleStartGame} 
                                 disabled={loading || sala.jogadores?.length < 2} 
-                                className="px-8 py-3 md:px-10 md:py-4 bg-accent text-black rounded-lg font-bold text-lg md:text-xl 
-                                           hover:bg-accent/80 disabled:bg-gray-500 disabled:cursor-not-allowed 
-                                           transition-all cursor-target
-                                           [transform:translateZ(0px)]
-                                           hover:scale-105 hover:[transform:translateZ(15px)] active:[transform:translateZ(5px)]
-                                           flex items-center justify-center gap-2 mx-auto shadow-lg shadow-accent/20
-                                           relative z-10" 
-                                title={sala.jogadores?.length < 2 ? "Precisa de pelo menos 2 conexões para iniciar" : "Iniciar a partida"} 
-                                data-augmented-ui="tl-scoop tr-scoop br-scoop bl-scoop"
+                                className="px-12 py-4 bg-accent text-black rounded-md font-bold text-2xl 
+                                           hover:bg-accent/80 disabled:bg-gray-600 disabled:text-gray-400 disabled:cursor-not-allowed 
+                                           transition-all cursor-target shadow-lg shadow-accent/30
+                                           hover:scale-105 active:scale-100"
+                                title={sala.jogadores?.length < 2 ? "Aguardando oponente..." : "Iniciar Batalha"} 
                             >
-                                {loading && !leaving ? <Loader2 className="animate-spin" /> : <Play />} 
-                                {loading && !leaving ? 'Iniciando...' : 'Iniciar Partida'} 
+                                {loading && !leaving ? <Loader2 className="animate-spin mx-auto" /> : 'INICIAR'} 
                             </button>
-                        )}
-                        {!sala.is_creator && ( 
-                            <p className="text-base md:text-lg text-text-muted flex items-center justify-center gap-2"> 
-                               <Loader2 className="animate-spin h-5 w-5"/> Aguardando Host <span className="font-semibold text-warning">{sala.jogador?.nome_de_usuario || ''}</span> iniciar...
+                        ) : ( 
+                            <p className="text-lg text-text-muted flex items-center justify-center gap-3"> 
+                               <Loader2 className="animate-spin h-6 w-6"/> Aguardando Host iniciar...
                             </p>
                         )}
-                        {sala.is_creator && sala.jogadores?.length < 2 && ( 
-                               <p className="text-sm text-warning/80 mt-2">Aguardando mais {2 - (sala.jogadores?.length || 0)} jogador(es) para iniciar (máximo 2).</p> 
-                        )}
-                        {sala.jogadores?.length === 2 && sala.status === 'waiting' && (
-                            <p className="text-sm text-accent/80 mt-2">Sala cheia! Pronto para iniciar.</p>
+                        {sala.jogadores?.length < 2 && ( 
+                           <p className="text-sm text-warning/80 mt-3">Aguardando oponente se conectar...</p> 
                         )}
                     </div>
                 )}
-                 {sala.status !== 'waiting' && !loading && sala.status !== 'abandonada' && sala.status !== 'terminada' &&( 
-                      <p className="text-base md:text-lg text-secondary text-center">Partida em andamento ou finalizada...</p> 
-                 )}
-                  {(sala.status === 'abandonada' || sala.status === 'terminada') && !loading && (
-                        <p className={`text-base md:text-lg text-center font-semibold ${sala.status === 'abandonada' ? 'text-primary' : 'text-secondary'}`}>
-                           Este Nó foi {sala.status}.
-                        </p>
+                 {(sala.status === 'abandonada' || sala.status === 'terminada') && !loading && (
+                    <p className={`text-lg font-semibold ${sala.status === 'abandonada' ? 'text-primary' : 'text-secondary'}`}>
+                       Esta Batalha foi {sala.status}.
+                    </p>
                   )}
             </div>
         </div>
     );
 }
-
 
 export default WaitingRoomScreen;

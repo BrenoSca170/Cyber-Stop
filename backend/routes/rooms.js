@@ -281,10 +281,26 @@ router.get('/:salaId', requireAuth, async (req, res) => {
         console.log(`---> [GET /rooms/${salaId}] Status OK. Buscando jogadores...`);
         const { data: jogadoresData, error: jogadoresError } = await supa
             .from('jogador_sala')
-            .select(`jogador:jogador_id ( jogador_id, nome_de_usuario )`)
+            .select(`
+                jogador:jogador_id (
+                    jogador_id,
+                    nome_de_usuario,
+                    avatar_nome
+                )
+            `)
             .eq('sala_id', salaId);
+
         if (jogadoresError) throw jogadoresError;
-        const jogadoresNaSala = (jogadoresData || []).map(js => js.jogador?.nome_de_usuario || `Jogador ${js.jogador?.jogador_id}`);
+
+        const jogadoresInfo = (jogadoresData || []).map(js => ({
+            jogador_id: js.jogador.jogador_id,
+            nome_de_usuario: js.jogador.nome_de_usuario,
+            avatar_nome: js.jogador.avatar_nome,
+            is_creator: js.jogador.jogador_id === salaData.jogador_criador_id
+        }));
+
+        const jogadoresNaSala = jogadoresInfo.map(j => j.nome_de_usuario);
+
         console.log(`---> [GET /rooms/${salaId}] Jogadores encontrados:`, jogadoresNaSala);
         const is_creator = salaData.jogador_criador_id === current_jogador_id;
         const responseData = {
@@ -296,6 +312,7 @@ router.get('/:salaId', requireAuth, async (req, res) => {
                 nome_de_usuario: salaData.jogador?.nome_de_usuario || 'Desconhecido'
             },
             jogadores: jogadoresNaSala,
+            jogadores_info: jogadoresInfo,
             temas_excluidos: salaData.temas_excluidos || [],
             letras_excluidas: salaData.letras_excluidas || [],
             is_creator: is_creator

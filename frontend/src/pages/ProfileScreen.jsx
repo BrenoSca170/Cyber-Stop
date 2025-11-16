@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 // import api from '../lib/api'; // Removido import duplicado
 // (CORRIGIDO) Importa 'avatarList' (objetos) e 'DEFAULT_AVATAR' (que é o primeiro objeto da lista)
-import { avatarList, DEFAULT_AVATAR } from '../lib/avatarList'; 
+import avatarList from '../lib/avatarList'; 
 import GlitchText from '../components/GlitchText'; 
 import MatrixRain from '../components/MatrixRain';
 import api from '../lib/api'; // <-- Mantido este import
@@ -13,7 +13,7 @@ function ProfileScreen() {
     nome_de_usuario: '',
     email: '',
     // (CORRIGIDO) Usamos o .nome do avatar padrão para o estado inicial
-    avatar_nome: DEFAULT_AVATAR.nome, 
+    avatar_nome: avatarList.find(a => a.nome === 'default').nome, 
   });
 
   const [loading, setLoading] = useState(true);
@@ -38,8 +38,7 @@ function ProfileScreen() {
         const { data } = await api.get('/auth/me'); 
         if (data.jogador) {
           if (!data.jogador.avatar_nome) {
-            // (CORRIGIDO) Usamos o .nome do avatar padrão
-            data.jogador.avatar_nome = DEFAULT_AVATAR.nome;
+            data.jogador.avatar_nome = avatarList.find(a => a.nome === 'default').nome;
           }
           setProfileData(data.jogador);
         }
@@ -82,14 +81,14 @@ function ProfileScreen() {
     if (isSaving || avatarList.length === 0) return;
     setIsSaving(true);
     
-    let newAvatarName = profileData.avatar_nome; // (Mudei o nome da var para clareza)
+    let newAvatarName = profileData.avatar_nome;
 
     // (CORRIGIDO) Usa 'avatarList'
     if (avatarList.length > 1) {
       do {
         const randomIndex = Math.floor(Math.random() * avatarList.length);
         // (CORRIGIDO) Pega apenas o .nome do objeto sorteado
-        newAvatarName = avatarList[randomIndex].nome; 
+        newAvatarName = avatarList[randomIndex].nome;
       } while (newAvatarName === profileData.avatar_nome);
     } else if (avatarList.length === 1) {
         // (CORRIGIDO) Pega apenas o .nome
@@ -112,7 +111,7 @@ function ProfileScreen() {
   // (NOVO) Encontra o objeto do avatar atual para pegar o .src correto
   const currentAvatar = avatarList.find(
     avatar => avatar.nome === profileData.avatar_nome
-  ) || DEFAULT_AVATAR;
+  ) || avatarList.find(a => a.nome === 'default');
 
   // --- NOVA FUNÇÃO HELPER PARA RENDERIZAR O INVENTÁRIO ---
   const renderInventory = () => {
@@ -150,7 +149,7 @@ function ProfileScreen() {
           <div className="relative w-32 h-32 md:w-40 md:h-40">
             <img
               // (CORRIGIDO) Usa o .src do objeto do avatar encontrado
-              src={currentAvatar.src} 
+              src={currentAvatar.url} 
               alt="Avatar Atual"
               className="w-full h-full rounded-full bg-gray-700 border-4 border-blue-500 object-cover shadow-lg shadow-blue-500/30"
             />
