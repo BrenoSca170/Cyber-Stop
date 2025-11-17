@@ -2,10 +2,28 @@
 import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { supa } from '../services/supabase.js'; //
-import { endRoundAndScore, getNextRoundForSala, getJogadoresDaSala, getRoundResults } from '../services/game.js'; //
+import { endRoundAndScore, getNextRoundForSala, getJogadoresDaSala, getRoundResults, buildRoundPayload, generateCoherentRounds } from '../services/game.js'; //
 import { saveRanking } from '../services/ranking.js'; //
 
 const JWT_SECRET = process.env.JWT_SECRET || 'developer_secret_key'; //
+
+async function ensureTempoId(durationSeconds) {
+  let { data, error } = await supa
+    .from('tempo')
+    .select('tempo_id, valor')
+    .eq('valor', durationSeconds)
+    .maybeSingle();
+  if (error) throw error;
+  if (data) return data.tempo_id;
+
+  const ins = await supa
+    .from('tempo')
+    .insert({ valor: durationSeconds })
+    .select('tempo_id')
+    .maybeSingle();
+  if (ins.error) throw ins.error;
+  return ins.data.tempo_id;
+}
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms)); //
 const GRACE_MS = 3000; //
@@ -419,14 +437,79 @@ export function initSockets(httpServer) { //
   io.on('connection', (socket) => { //
     console.log('a user connected:', socket.id, 'jogador_id:', socket.data.jogador_id); //
 
-    socket.on('join-room', (salaId) => { //
+    socket.on('join-room', async (salaId) => { //
         salaId = String(salaId); // Garante que é string
+
+        // Leave all other rooms
+        for (const room of socket.rooms) {
+            if (room !== socket.id && room !== salaId) {
+                socket.leave(room);
+                console.log(`Socket ${socket.id} left room ${room}`);
+            }
+        }
+
         console.log(`Socket ${socket.id} (jogador ${socket.data.jogador_id}) joining room ${salaId}`);
         socket.join(salaId); //
         // Guarda a sala no socket data para referência futura (ex: disconnect)
         socket.data.salaId = salaId; //
         // Confirma que entrou (opcional)
         socket.emit('joined', { salaId }); //
+
+        // Emit players update
+        const io = getIO();
+        if (io) {
+            try {
+                const { data: jogadoresData, error: jogadoresError } = await supa
+                    .from('jogador_sala')
+                    .select(`
+                        jogador:jogador_id (
+                            jogador_id,
+                            nome_de_usuario,
+                            avatar_nome,
+                            personagem_nome,
+                            ranking (pontuacao_total)
+                        )
+                    `)
+                    .eq('sala_id', salaId);
+
+                if (jogadoresError) throw jogadoresError;
+
+                const { data: salaDataForCreator, error: salaErrorForCreator } = await supa
+                    .from('sala')
+                    .select('jogador_criador_id')
+                    .eq('sala_id', salaId)
+                    .single();
+
+                if (salaErrorForCreator) throw salaErrorForCreator;
+
+                const jogadoresInfo = (jogadoresData || []).map(js => ({
+                    jogador_id: js.jogador.jogador_id,
+                    nome_de_usuario: js.jogador.nome_de_usuario,
+                    avatar_nome: js.jogador.avatar_nome,
+                    personagem_nome: js.jogador.personagem_nome,
+                    ranking: js.jogador.ranking?.pontuacao_total,
+                    is_creator: js.jogador.jogador_id === salaDataForCreator.jogador_criador_id
+                }));
+
+                const jogadoresNaSala = jogadoresInfo.map(j => j.nome_de_usuario);
+
+                io.to(String(salaId)).emit('room:players_updated', { jogadores: jogadoresNaSala, jogadores_info: jogadoresInfo });
+            } catch (error) {
+                console.error(`[join-room] Error emitting players update for sala ${salaId}:`, error);
+            }
+        }
+    });
+
+    socket.on('player:react', ({ salaId, emojiId }) => {
+        const fromPlayerId = socket.data.jogador_id;
+        if (!salaId || !emojiId || !fromPlayerId) {
+            console.warn(`[player:react] Invalid payload: salaId=${salaId}, emojiId=${emojiId}, fromPlayerId=${fromPlayerId}`);
+            return;
+        }
+        io.to(String(salaId)).emit('player:reacted', {
+            fromPlayerId,
+            emojiId,
+        });
     });
 
     socket.on('round:stop', async ({ salaId, roundId, by }) => {
@@ -953,6 +1036,158 @@ export function initSockets(httpServer) { //
     }
 });
     // *** FIM DA MODIFICAÇÃO DO PASSO 5 ***
+
+    socket.on('match:start', async ({ salaId, rounds, duration }) => {
+      try {
+        const sala_id = Number(salaId);
+        if (!sala_id) throw new Error('sala_id é obrigatório');
+
+        const jogador_id = socket.data.jogador_id;
+
+        // Check if the player who is starting the game is the host
+        const { data: salaData, error: salaError } = await supa
+          .from('sala')
+          .select('jogador_criador_id')
+          .eq('sala_id', sala_id)
+          .single();
+
+        if (salaError) throw salaError;
+        if (salaData.jogador_criador_id !== jogador_id) {
+          throw new Error('Apenas o host pode iniciar a partida.');
+        }
+
+        const ROUNDS = Number(rounds || 5);
+        const DURATION = Number(duration || 20);
+
+        const qExisting = await supa
+          .from('rodada')
+          .select('rodada_id, numero_da_rodada, status')
+          .eq('sala_id', sala_id)
+          .not('status', 'eq', 'done')
+          .order('numero_da_rodada', { ascending: true });
+
+        if (qExisting.error) throw qExisting.error;
+
+        if ((qExisting.data || []).length > 0) {
+          const first = qExisting.data[0];
+          
+          if (first.status === 'in_progress') {
+            const io = getIO();
+            if (io) {
+              const payload = await buildRoundPayload(first.rodada_id);
+              const qTempo = await supa.from('rodada').select('tempo:tempo_id(valor)').eq('rodada_id', first.rodada_id).single();
+              const duration = qTempo.data?.tempo?.valor || DURATION;
+              const timeLeft = getTimeLeftForSala(sala_id, duration);
+              
+              io.to(String(sala_id)).emit('round:ready', payload);
+              io.to(String(sala_id)).emit('round:started', { roundId: payload.rodada_id, duration: duration, timeLeft: timeLeft });
+            }
+            return;
+          }
+          
+          const io = getIO();
+          if (io) {
+            const payload = await buildRoundPayload(first.rodada_id);
+
+            const { error: updateSalaError } = await supa
+              .from('sala')
+              .update({ status: 'in_progress' })
+              .eq('sala_id', sala_id);
+            if (updateSalaError) {
+                console.error(`Erro ao atualizar status da sala ${sala_id} para in_progress:`, updateSalaError);
+            }
+
+            await supa
+              .from('rodada')
+              .update({ status: 'in_progress' })
+              .eq('rodada_id', payload.rodada_id);
+
+            const timeLeft = getTimeLeftForSala(sala_id, DURATION);
+            io.to(String(sala_id)).emit('round:ready', payload);
+            io.to(String(sala_id)).emit('round:started', { roundId: payload.rodada_id, duration: DURATION, timeLeft: timeLeft });
+            
+            scheduleRoundCountdown({ salaId: sala_id, roundId: payload.rodada_id, duration: DURATION });
+          }
+          return;
+        }
+
+        const qPlayersJS = await supa.from('jogador_sala').select('jogador_id').eq('sala_id', sala_id);
+
+        const ids = (qPlayersJS.data || []).map(r => Number(r.jogador_id));
+        const unique = [...new Set(ids)].filter(Boolean);
+
+        if (unique.length < 2) {
+          socket.emit('app:error', { context: 'match-start', message: 'A sala precisa ter exatamente 2 jogadores para iniciar a partida.' });
+          return;
+        }
+        if (unique.length > 2) {
+          socket.emit('app:error', { context: 'match-start', message: 'A sala tem mais jogadores do que o permitido. Máximo de 2 jogadores.' });
+          return;
+        }
+
+        const tempo_id = await ensureTempoId(DURATION);
+
+        const roundsInfo = await generateCoherentRounds({ totalRounds: ROUNDS });
+
+        const created = [];
+        for (let i = 0; i < Math.min(roundsInfo.length, ROUNDS); i++) {
+          const { letra_id, letra_char, temas } = roundsInfo[i];
+
+          const ins = await supa
+            .from('rodada')
+            .insert({
+              sala_id,
+              numero_da_rodada: i + 1,
+              letra_id,
+              tempo_id,
+              status: 'ready'
+            })
+            .select('rodada_id')
+            .maybeSingle();
+          if (ins.error) throw ins.error;
+          const rodada_id = ins.data.rodada_id;
+
+          const payloadTema = temas.map(t => ({
+            rodada_id,
+            tema_id: t.tema_id
+          }));
+          const insTema = await supa.from('rodada_tema').insert(payloadTema);
+          if (insTema.error) throw insTema.error;
+
+          created.push({
+            rodada_id,
+            sala_id,
+            letra: letra_char,
+            temas: temas.map(t => ({ id: t.tema_id, nome: t.tema_nome }))
+          });
+        }
+
+        const io = getIO();
+        if (io && created.length) {
+          const { error: updateSalaError } = await supa
+            .from('sala')
+            .update({ status: 'in_progress' })
+            .eq('sala_id', sala_id);
+          if (updateSalaError) {
+              console.error(`Erro ao atualizar status da sala ${sala_id} para in_progress:`, updateSalaError);
+          }
+
+          await supa
+            .from('rodada')
+            .update({ status: 'in_progress' })
+            .eq('rodada_id', created[0].rodada_id);
+
+          const timeLeft = getTimeLeftForSala(sala_id, DURATION);
+          io.to(String(sala_id)).emit('round:ready', created[0]);
+          io.to(String(sala_id)).emit('round:started', { roundId: created[0].rodada_id, duration: DURATION, timeLeft: timeLeft });
+          
+          scheduleRoundCountdown({ salaId: sala_id, roundId: created[0].rodada_id, duration: DURATION });
+        }
+      } catch (e) {
+        console.error('/matches/start failed', e);
+        socket.emit('app:error', { context: 'match-start', message: e.message });
+      }
+    });
 
     socket.on('disconnect', (reason) => { //
         console.log('user disconnected:', socket.id, 'jogador_id:', socket.data.jogador_id, 'reason:', reason); //

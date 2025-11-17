@@ -102,19 +102,19 @@ function ProfileScreen() {
         
         {/* Coluna Esquerda: Identidade */}
         <div 
-          className="md:col-span-1 flex flex-col items-center p-4 border-2 border-red-500 bg-black/50"
+          className="md:col-span-1 flex flex-col items-center p-4 border-2 border-pink-500 bg-black/50"
           data-augmented-ui="tl-clip tr-clip br-clip bl-clip border"
         >
-          <h2 className="text-2xl font-bold text-green-400 uppercase tracking-widest mb-4">Identidade</h2>
+          <h2 className="text-2xl font-bold text-pink-400 uppercase tracking-widest mb-4">Identidade</h2>
           <div className="relative w-40 h-40 mb-4">
-            <div className="absolute inset-0 rounded-full border-4 border-red-500 animate-pulse"></div>
+            <div className="absolute inset-0 rounded-full border-4 border-pink-500 animate-pulse"></div>
             <img
               src={currentAvatar.url || '/avatars/default.png'}
               alt="Avatar"
               className="w-full h-full rounded-full object-cover p-1"
             />
           </div>
-          <div className="w-full p-2 mb-4 text-center border border-red-500 bg-black/30">
+          <div className="w-full p-2 mb-4 text-center border border-pink-500 bg-black/30">
             <p className="text-sm"><span className="font-bold">Usuário:</span> {profileData.nome_de_usuario}</p>
             <p className="text-sm"><span className="font-bold">Email:</span> {profileData.email}</p>
           </div>
@@ -125,10 +125,10 @@ function ProfileScreen() {
 
         {/* Coluna Central: Perfil */}
         <div 
-          className="md:col-span-1 flex flex-col items-center p-4 border-2 border-purple-500 bg-black/50"
+          className="md:col-span-1 flex flex-col items-center p-4 border-2 border-green-500 bg-black/50"
           data-augmented-ui="tl-clip tr-clip br-clip bl-clip border"
         >
-          <h2 className="text-2xl font-bold text-purple-400 uppercase tracking-widest mb-4">Perfil</h2>
+          <h2 className="text-2xl font-bold text-green-400 uppercase tracking-widest mb-4">Perfil</h2>
           <div className="relative w-full h-80 mb-4">
             <img
               src={currentPersonagem.url || '/characters/default.png'}
@@ -144,10 +144,10 @@ function ProfileScreen() {
         {/* Coluna Direita: Status e Inventário */}
         <div className="md:col-span-1 flex flex-col justify-between">
           <div 
-            className="w-full p-4 border-2 border-red-500 bg-black/50 mb-6"
+            className="w-full p-4 border-2 border-pink-500 bg-black/50 mb-6"
             data-augmented-ui="tl-clip tr-clip br-clip bl-clip border"
           >
-            <h2 className="text-2xl font-bold text-red-400 uppercase tracking-widest mb-4">Status</h2>
+            <h2 className="text-2xl font-bold text-pink-400 uppercase tracking-widest mb-4">Status</h2>
             <div className="text-base space-y-2">
               <p><span className="font-bold">Partidas Jogadas:</span> {profileData.ranking_stats.partidas_jogadas}</p>
               <p><span className="font-bold">Vitórias:</span> {profileData.ranking_stats.vitorias}</p>
@@ -155,10 +155,10 @@ function ProfileScreen() {
             </div>
           </div>
           <div 
-            className="w-full p-4 border-2 border-red-500 bg-black/50 flex-grow"
+            className="w-full p-4 border-2 border-pink-500 bg-black/50 flex-grow"
             data-augmented-ui="tl-clip tr-clip br-clip bl-clip border"
           >
-            <h2 className="text-2xl font-bold text-red-400 uppercase tracking-widest mb-4">Inventario</h2>
+            <h2 className="text-2xl font-bold text-pink-400 uppercase tracking-widest mb-4">Inventario</h2>
             <div className="overflow-y-auto h-48 pr-2">
               {inventoryLoading ? <p>Carregando...</p> : inventoryItems.map(item => <InventoryItem key={item.power_up_id} item={item} />)}
               {inventoryError && <p className="text-red-500">{inventoryError}</p>}

@@ -41,16 +41,10 @@ function WaitingRoomScreen() {
         }
     };
 
-    const handleStartGame = async () => { 
+    const handleStartGame = () => { 
         setLoading(true); 
         setError(''); 
-        try { 
-            await api.post(`/matches/start`, { sala_id: Number(salaId) });
-        } catch (err) { 
-            console.error('Erro ao iniciar partida:', err); 
-            setError(err.response?.data?.error || err.message || 'Falha ao iniciar a partida.'); 
-            setLoading(false); 
-        }
+        socket.emit('match:start', { salaId: Number(salaId) });
     };
 
     const handleLeaveRoom = () => { 
@@ -63,98 +57,79 @@ function WaitingRoomScreen() {
 
     useEffect(() => { 
         let isMounted = true; 
-        let intervalId = null; 
 
-        const fetchSalaState = async (isInitial = false) => {
-            if (!isMounted) return; 
-            if (isInitial) setLoading(true);
-            try { 
-                const response = await api.get(`/rooms/${salaId}`); 
-                const salaData = response.data; 
-                if (isMounted) { 
-                    setSala(salaData); 
-                    setError(''); 
+        const fetchInitialState = async () => {
+            if (!isMounted) return;
+            setLoading(true);
+            try {
+                const response = await api.get(`/rooms/${salaId}`);
+                const salaData = response.data;
+                if (isMounted) {
+                    setSala(salaData);
+                    setError('');
                     if (salaData.status === 'in_progress') {
-                         if (intervalId) clearInterval(intervalId); 
-                         socket.off('room:players_updated', handlePlayersUpdate);
-                         socket.off('room:abandoned', handleRoomAbandoned);
-                         socket.off('round:ready', handleGameStarted);
-                         socket.off('round:started', handleGameStarted);
-                         navigate(`/game/${salaId}`, { replace: true }); 
-                         return; 
+                        navigate(`/game/${salaId}`, { replace: true });
+                        return;
                     }
-                     if (salaData.status === 'terminada' || salaData.status === 'abandonada') {
-                         alert(`A sala foi ${salaData.status}.`);
-                         navigate('/');
-                     }
+                    if (salaData.status === 'terminada' || salaData.status === 'abandonada') {
+                        alert(`A sala foi ${salaData.status}.`);
+                        navigate('/');
+                    }
                 }
-            } catch (err) { 
-                console.error('Erro ao buscar estado da sala:', err); 
-                if (isMounted) { 
-                    if (err.response?.status === 404 || err.response?.status === 410) { 
-                        alert(err.response?.data?.error || 'Sala não encontrada ou abandonada.'); 
-                        navigate('/'); 
-                    } else { 
+            } catch (err) {
+                console.error('Erro ao buscar estado da sala:', err);
+                if (isMounted) {
+                    if (err.response?.status === 404 || err.response?.status === 410) {
+                        alert(err.response?.data?.error || 'Sala não encontrada ou abandonada.');
+                        navigate('/');
+                    } else {
                         setError('Falha ao carregar dados da sala.');
                     }
                 }
-           } finally { 
-               if (isMounted) {
-                   setLoading(false); 
-               }
-           }
+            } finally {
+                if (isMounted) {
+                    setLoading(false);
+                }
+            }
         };
 
-       const handlePlayersUpdate = ({ jogadores, jogadores_info }) => {
-           if (isMounted) {
-               setSala(currentSala => {
-                   if (!currentSala) return null; 
-                   return { ...currentSala, jogadores: jogadores, jogadores_info: jogadores_info };
-               });
-           }
-       };
-
-       const handleRoomAbandoned = ({ message }) => {
-           if (isMounted) {
-               alert(message || 'O criador abandonou a sala. Voltando ao lobby.');
-               navigate('/');
-           }
-       };
-
-       const handleGameStarted = (data) => {
+        const handlePlayersUpdate = ({ jogadores, jogadores_info }) => {
             if (isMounted) {
-                if (intervalId) clearInterval(intervalId);
-                socket.off('room:players_updated', handlePlayersUpdate);
-                socket.off('room:abandoned', handleRoomAbandoned);
-                socket.off('round:ready', handleGameStarted); 
-                socket.off('round:started', handleGameStarted); 
-                navigate(`/game/${salaId}`, { replace: true }); 
+                setSala(currentSala => {
+                    if (!currentSala) return null;
+                    return { ...currentSala, jogadores: jogadores, jogadores_info: jogadores_info };
+                });
             }
-       };
+        };
 
-       socket.on('room:players_updated', handlePlayersUpdate);
-       socket.on('room:abandoned', handleRoomAbandoned);
-       socket.on('round:ready', handleGameStarted); 
-       socket.on('round:started', handleGameStarted);
-       
-       socket.emit('join-room', String(salaId)); 
-       
-       setTimeout(() => {
-         socket.emit('join-room', String(salaId));
-       }, 500);
+        const handleRoomAbandoned = ({ message }) => {
+            if (isMounted) {
+                alert(message || 'O criador abandonou a sala. Voltando ao lobby.');
+                navigate('/');
+            }
+        };
 
-        fetchSalaState(true); 
-        intervalId = setInterval(() => {
-          fetchSalaState(false);
-        }, 1000); 
+        const handleGameStarted = (data) => {
+            if (isMounted) {
+                navigate(`/game/${salaId}`, { replace: true });
+            }
+        };
+
+        socket.on('room:players_updated', handlePlayersUpdate);
+        socket.on('room:abandoned', handleRoomAbandoned);
+        socket.on('round:ready', handleGameStarted);
+        socket.on('round:started', handleGameStarted);
+        
+        socket.emit('join-room', String(salaId));
+
+        fetchInitialState();
 
         return () => { 
             isMounted = false; 
-            if (intervalId) clearInterval(intervalId); 
-           socket.off('room:players_updated', handlePlayersUpdate);
-           socket.off('room:abandoned', handleRoomAbandoned);
-           socket.off('round:ready', handleGameStarted); 
-           socket.off('round:started', handleGameStarted); 
+            socket.off('room:players_updated', handlePlayersUpdate);
+            socket.off('room:abandoned', handleRoomAbandoned);
+            socket.off('round:ready', handleGameStarted); 
+            socket.off('round:started', handleGameStarted); 
         };
     }, [salaId, navigate]); 
 

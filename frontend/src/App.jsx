@@ -16,7 +16,7 @@ function App() {
     // Cria elemento de áudio global
     const audio = new Audio('/login-music.mp3');
     audio.loop = true; // Loop infinito
-    audio.volume = 0.5; // Volume 50%
+    audio.volume = 0.04; // Volume 50%
     audioRef.current = audio;
 
     // Tenta tocar automaticamente

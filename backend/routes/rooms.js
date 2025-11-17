@@ -111,17 +111,45 @@ router.post('/join', requireAuth, async (req, res) => {
     const io = getIO();
     if (io) {
        console.log(`---> [POST /rooms/join] Buscando jogadores atualizados para emitir evento...`);
-       const { data: jogadoresAtualizadosData, error: jogadoresError } = await supa
-           .from('jogador_sala')
-           .select('jogador:jogador_id ( jogador_id, nome_de_usuario )')
-           .eq('sala_id', sala_id);
-       if (!jogadoresError) {
-           const jogadoresNomes = (jogadoresAtualizadosData || []).map(js => js.jogador?.nome_de_usuario || `Jogador ${js.jogador?.jogador_id}`);
-           console.log(`---> [POST /rooms/join] Emitindo room:players_updated para sala ${sala_id} com jogadores:`, jogadoresNomes);
-           io.to(String(sala_id)).emit('room:players_updated', { jogadores: jogadoresNomes });
-       } else {
-            console.error(`---> [POST /rooms/join] Erro ao buscar jogadores atualizados para emitir evento:`, jogadoresError);
-       }
+       try {
+            const { data: jogadoresData, error: jogadoresError } = await supa
+                .from('jogador_sala')
+                .select(`
+                    jogador:jogador_id (
+                        jogador_id,
+                        nome_de_usuario,
+                        avatar_nome,
+                        personagem_nome,
+                        ranking (pontuacao_total)
+                    )
+                `)
+                .eq('sala_id', sala_id);
+
+            if (jogadoresError) throw jogadoresError;
+
+            const { data: salaDataForCreator, error: salaErrorForCreator } = await supa
+                .from('sala')
+                .select('jogador_criador_id')
+                .eq('sala_id', sala_id)
+                .single();
+
+            if (salaErrorForCreator) throw salaErrorForCreator;
+
+            const jogadoresInfo = (jogadoresData || []).map(js => ({
+                jogador_id: js.jogador.jogador_id,
+                nome_de_usuario: js.jogador.nome_de_usuario,
+                avatar_nome: js.jogador.avatar_nome,
+                personagem_nome: js.jogador.personagem_nome,
+                ranking: js.jogador.ranking?.pontuacao_total,
+                is_creator: js.jogador.jogador_id === salaDataForCreator.jogador_criador_id
+            }));
+
+            const jogadoresNaSala = jogadoresInfo.map(j => j.nome_de_usuario);
+
+            io.to(String(sala_id)).emit('room:players_updated', { jogadores: jogadoresNaSala, jogadores_info: jogadoresInfo });
+        } catch (error) {
+            console.error(`---> [POST /rooms/join] Erro ao buscar jogadores atualizados para emitir evento:`, error);
+        }
     } else {
         console.warn(`---> [POST /rooms/join] Instância do Socket.IO não encontrada. Não foi possível emitir evento.`);
     }
@@ -321,6 +349,7 @@ router.get('/:salaId', requireAuth, async (req, res) => {
             letras_excluidas: salaData.letras_excluidas || [],
             is_creator: is_creator
         };
+        res.setHeader('Cache-Control', 'no-cache');
         res.json(responseData);
 
     } catch (e) {
