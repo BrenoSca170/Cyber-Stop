@@ -58,7 +58,7 @@ export default function GameScreen() {
     isInRoomOrMatch,
     exitConfirmed,
     exitCancelled
-  } = useExitConfirmation(salaId, matchStarted);
+  } = useExitConfirmation(salaId, matchStarted, null, finalizado);
 
   // 2. Hook de Input: Passa o gameState para ele
   const { 

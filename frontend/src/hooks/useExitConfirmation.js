@@ -8,8 +8,9 @@ import api from '../lib/api';
  * @param {string} salaId - ID da sala atual (pode ser null)
  * @param {boolean} matchStarted - Se a partida já começou
  * @param {Function} onExitConfirmed - Callback quando a saída é confirmada
+ * @param {boolean} matchFinished - Se a partida já terminou (não deve interceptar saída)
  */
-export function useExitConfirmation(salaId, matchStarted = false, onExitConfirmed = null) {
+export function useExitConfirmation(salaId, matchStarted = false, onExitConfirmed = null, matchFinished = false) {
   const [showModal, setShowModal] = useState(false);
   const [pendingAction, setPendingAction] = useState(null);
   const location = useLocation();
@@ -23,13 +24,14 @@ export function useExitConfirmation(salaId, matchStarted = false, onExitConfirme
   useEffect(() => {
     const isWaitingRoom = location.pathname.startsWith('/waiting/');
     const isGameScreen = location.pathname.startsWith('/game/');
-    shouldIntercept.current = (isWaitingRoom || isGameScreen) && salaId && (matchStarted || isWaitingRoom);
+    // Não intercepta se a partida já terminou
+    shouldIntercept.current = (isWaitingRoom || isGameScreen) && salaId && (matchStarted || isWaitingRoom) && !matchFinished;
     // Reset das flags quando muda de rota (não está mais em sala/partida)
     if (!shouldIntercept.current) {
       exitConfirmed.current = false;
       exitCancelled.current = false;
     }
-  }, [location.pathname, salaId, matchStarted]);
+  }, [location.pathname, salaId, matchStarted, matchFinished]);
 
   // Função para remover o beforeunload handler
   const removeBeforeUnload = useCallback(() => {
