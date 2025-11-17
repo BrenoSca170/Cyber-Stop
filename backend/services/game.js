@@ -227,6 +227,19 @@ async function loadLexiconMap({ temaIds, letraId }) {
 /* =========================
    SCORING (com dicionário)
 ========================= */
+
+function findPartialMatch(userAnswer, lexiconSet) {
+    if (userAnswer.length < 3) { // Don't match on very short answers
+        return false;
+    }
+    for (const lexiconWord of lexiconSet) {
+        if (lexiconWord.startsWith(userAnswer)) {
+            return true; // Found a match
+        }
+    }
+    return false; // No match found
+}
+
 /**
  * HARDENING: encerra rodada com lock e pontua com base no dicionário
  * ATUALIZADO: Lógica de pontuação refeita para N jogadores
@@ -317,7 +330,10 @@ export async function endRoundAndScore({ salaId, roundId, skippedWordsSet = null
       const resposta = respostas[temaNome]?.[jId]?.resposta || '' // Pega a resposta do mapa carregado
       const norm = normalize(resposta) // Normaliza a resposta
       const startsWith = letraNorm ? norm.startsWith(letraNorm) : false // Verifica se começa com a letra (normalizada)
-      const valida = !!norm && startsWith && set.has(norm) // É válida se não for vazia, começar certo e existir no dicionário
+      
+      const isExactMatch = set.has(norm);
+      const isPartialMatch = !isExactMatch && findPartialMatch(norm, set);
+      const valida = !!norm && startsWith && (isExactMatch || isPartialMatch); // É válida se não for vazia, começar certo e existir no dicionário (exata ou parcial)
 
       // Armazena informações processadas
       temaRespostas[jId] = { resposta, norm, valida, pontos: 0 }
