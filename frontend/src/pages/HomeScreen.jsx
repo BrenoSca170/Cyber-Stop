@@ -1,14 +1,20 @@
 // src/pages/HomeScreen.jsx
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Play, Store, LogOut, Trophy } from 'lucide-react'; // Ícones
 import CyberLogo from '../components/CyberLogo'; // Importa o componente 3D
 import GlitchText from '../components/GlitchText'; // Importa o componente de texto com glitch
 import PixelBlast from '../components/PixelBlast';
 import TargetCursor from '../components/TargetCursor'; // 1. Importe o TargetCursor
+import { playAudio } from '../lib/audio';
 
 export default function HomeScreen() {
   const navigate = useNavigate();
+
+  // Inicia a música de fundo quando o componente é montado
+  useEffect(() => {
+    playAudio();
+  }, []);
 
   const handleLogout = () => {
     localStorage.removeItem('token');

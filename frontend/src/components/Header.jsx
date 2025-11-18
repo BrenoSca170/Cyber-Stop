@@ -5,6 +5,7 @@ import { Gem, User, LogOut, Volume2, VolumeX } from 'lucide-react';
 import avatarList from '../lib/avatarList';
 import api from '../lib/api';
 import socket from '../lib/socket';
+import { stopAudio } from '../lib/audio';
 import { useExitConfirmation } from '../hooks/useExitConfirmation';
 import ExitConfirmationModal from './ExitConfirmationModal';
 
@@ -49,7 +50,7 @@ function useUserData() {
   return { user, loading };
 }
 
-export default function Header({ isMuted, toggleMute }) {
+export default function Header({ volume, onVolumeChange }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, loading: userLoading } = useUserData();
@@ -160,6 +161,7 @@ export default function Header({ isMuted, toggleMute }) {
 
   // Logout (com interceptação se o usuário estiver em sala/partida)
   const performLogout = () => {
+    stopAudio(); // Para a música imediatamente
     try {
       if (socket && socket.connected) socket.disconnect();
     } catch (err) {
@@ -261,14 +263,20 @@ export default function Header({ isMuted, toggleMute }) {
             </div>
           </div>
 
-          {/* Botão de Volume */}
-          <button
-            onClick={toggleMute}
-            className="bg-primary/20 hover:bg-primary/40 text-white p-2 rounded-lg transition-colors cursor-target"
-            title={isMuted ? 'Ativar Som' : 'Desativar Som'}
-          >
-            {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
-          </button>
+          {/* Controle de Volume */}
+          <div className="flex items-center gap-2 bg-primary/20 p-2 rounded-lg">
+            <Volume2 size={20} className="text-white" />
+            <input
+              type="range"
+              min="0"
+              max="0.2" // Volume máximo mais baixo para não ser muito alto
+              step="0.01"
+              value={volume}
+              onChange={(e) => onVolumeChange(e.target.value)}
+              className="w-24 h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-primary"
+              title="Volume"
+            />
+          </div>
 
           {/* Botão de Logout */}
           <button

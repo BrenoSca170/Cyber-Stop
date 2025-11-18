@@ -2,75 +2,32 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { useEffect, useState } from 'react';
 
-// 1. Importar o componente TargetCursor que você criou
 import TargetCursor from './components/TargetCursor';
-// 2. IMPORTAR O HEADER DE VOLTA
-import Header from './components/Header'; // Assumindo que está em /components/Header.jsx
-
-// --- Audio Singleton ---
-// Create a single audio instance for the entire application
-const backgroundMusic = new Audio('/login-music.mp3');
-backgroundMusic.loop = true;
-backgroundMusic.volume = 0.04;
-
-// Flag to ensure we only attach the interaction listener once
-let hasAttachedInteractionListener = false;
-
-const playAudio = async () => {
-  // If it's already playing, don't do anything
-  if (backgroundMusic.currentTime > 0 && !backgroundMusic.paused) {
-    return;
-  }
-  
-  try {
-    await backgroundMusic.play();
-    console.log('[App] Música de fundo iniciada');
-  } catch (error) {
-    console.log('[App] Autoplay bloqueado. A música iniciará após a primeira interação.', error);
-    
-    if (!hasAttachedInteractionListener) {
-      hasAttachedInteractionListener = true;
-      const handleFirstInteraction = async () => {
-        try {
-          await backgroundMusic.play();
-          console.log('[App] Música iniciada após interação do usuário');
-          // Remove listeners after the first successful play
-          document.removeEventListener('click', handleFirstInteraction);
-          document.removeEventListener('keydown', handleFirstInteraction);
-        } catch (err) {
-          console.error('[App] Erro ao tocar música após interação:', err);
-        }
-      };
-      
-      document.addEventListener('click', handleFirstInteraction);
-      document.addEventListener('keydown', handleFirstInteraction);
-    }
-  }
-};
-// --- End Audio Singleton ---
-
+import Header from './components/Header';
+import { setVolume as setAudioVolume, stopAudio } from './lib/audio'; // Import and rename audio controls
 
 function App() {
   const location = useLocation();
-  const [isMuted, setIsMuted] = useState(false);
+  const [volume, setVolume] = useState(0.04); // Default volume
 
   const isGameScreen = location.pathname.startsWith('/game/');
   const isWaitingRoom = location.pathname.startsWith('/waiting/');
 
-  const toggleMute = () => {
-    // We now just toggle the state. The effect will handle the volume.
-    setIsMuted(prev => !prev);
+  const handleVolumeChange = (newVolume) => {
+    setVolume(parseFloat(newVolume));
   };
 
-  // This effect runs only once per application lifecycle to start the music.
+  // This effect runs when App unmounts (e.g., on logout) to stop the music
   useEffect(() => {
-    playAudio();
+    return () => {
+      stopAudio();
+    };
   }, []);
 
-  // This effect toggles the volume based on the isMuted state.
+  // This effect updates the volume based on the volume state.
   useEffect(() => {
-    backgroundMusic.volume = isMuted ? 0 : 0.04;
-  }, [isMuted]);
+    setAudioVolume(volume);
+  }, [volume]);
 
   return (
     <>
@@ -95,7 +52,7 @@ function App() {
         }}
       />
       
-      {!isGameScreen && !isWaitingRoom && <Header isMuted={isMuted} toggleMute={toggleMute} />}
+      {!isGameScreen && !isWaitingRoom && <Header volume={volume} onVolumeChange={handleVolumeChange} />}
 
       {/* O 'main' agora tem o padding-top (pt-[72px]) 
           para não ficar escondido atrás do Header */}
