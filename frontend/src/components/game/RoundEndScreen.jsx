@@ -22,12 +22,12 @@ function EmojiReactions({ salaId }) {
   };
 
   return (
-    <div className="absolute bottom-4 right-4 bg-gray-900 p-2 rounded-lg shadow-lg flex gap-2 z-20">
+    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-gray-950/80 border border-purple-500/50 p-2 rounded-xl shadow-lg flex gap-2 z-40 backdrop-blur-sm">
       {emojis.map((emoji) => (
         <button
           key={emoji.id}
           onClick={() => handleReactionClick(emoji.id)}
-          className="p-2 bg-gray-700 rounded-md hover:bg-gray-600 transition-all text-xl"
+          className="p-3 bg-gray-800/50 border border-purple-700/50 rounded-lg hover:bg-purple-900/60 transition-all text-2xl text-white shadow-purple-glow"
           title={emoji.id}
         >
           {emoji.text}
@@ -40,7 +40,7 @@ function EmojiReactions({ salaId }) {
 // 2. Componente de Animação de Emoji (VERSÃO ATUALIZADA)
 function EmojiSparkle({ reactions }) {
   return (
-    <div className="absolute top-0 left-0 w-full h-full pointer-events-none overflow-hidden z-10">
+    <div className="absolute top-0 left-0 w-full h-full pointer-events-none overflow-hidden z-30">
       {/*
         AnimatePresence é o que permite a animação de "saída" (exit)
         quando o emoji é removido do array 'reactions'.
@@ -53,6 +53,7 @@ function EmojiSparkle({ reactions }) {
             style={{
               left: `${reaction.x}%`, // Posição X aleatória
               bottom: '10%', // Começa perto da parte de baixo
+              textShadow: '0 0 8px rgba(192, 132, 252, 0.8), 0 0 16px rgba(192, 132, 252, 0.6)', // Cyberpunk glow
             }}
             // Animação de entrada
             initial={{ opacity: 0, y: 0, scale: 0.5 }}
@@ -134,7 +135,7 @@ export default function RoundEndScreen({ results, salaId, meuJogadorId, temas = 
 
       <h1 className="text-4xl font-bold mb-6 text-yellow-400 z-10">Resultados da Rodada</h1>
       
-      <div className="w-full max-w-4xl bg-gray-800 bg-opacity-80 rounded-lg shadow-xl overflow-hidden z-10">
+      <div className="w-full max-w-4xl bg-gray-800 bg-opacity-80 rounded-lg shadow-xl overflow-hidden z-20">
         <table className="w-full min-w-full text-left">
           <thead className="bg-gray-900">
             <tr>
