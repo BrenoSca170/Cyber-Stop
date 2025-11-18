@@ -102,6 +102,14 @@ function ProfileScreen() {
     try {
       // endpoint esperado: /auth/avatar ou /auth/personagem
       await api.put(`/auth/${type}`, { [key]: newName });
+
+      // Após o sucesso, busca os dados atualizados do usuário
+      const { data: updatedUserData } = await api.get('/auth/me');
+      if (updatedUserData && updatedUserData.jogador) {
+        // Dispara o evento para notificar outros componentes (como o Header)
+        window.dispatchEvent(new CustomEvent('userUpdated', { detail: updatedUserData.jogador }));
+      }
+
     } catch (error) {
       console.error(`Erro ao salvar ${type}:`, error?.message ?? error);
       // rollback em caso de erro

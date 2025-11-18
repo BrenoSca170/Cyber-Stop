@@ -117,7 +117,7 @@ export default function ActiveRound({
 
       // Aplicada fonte cyber e perspectiva
 
-      <div className="max-w-3xl mx-auto text-white space-y-4 p-4 relative font-cyber [perspective:1000px]">
+      <div className="max-w-3xl mx-auto text-white p-4 relative font-cyber [perspective:1000px] pt-[132px]">
         <div className="absolute top-4 right-4 z-50">
           <button
             onClick={() => handleExitClick(() => navigate('/'))}
@@ -131,13 +131,13 @@ export default function ActiveRound({
 
         {/* Cabeçalho com Timer e ID (com augmented-ui) */}
 
-        <header 
+                <header 
 
-          className="flex items-center justify-between bg-bg-secondary p-3 shadow sticky top-[72px] z-10"
+                  className="flex items-center justify-between bg-bg-secondary p-3 shadow sticky top-[72px] z-20"
 
-          data-augmented-ui="tl-clip tr-clip br-clip bl-clip border"
+                  data-augmented-ui="tl-clip tr-clip br-clip bl-clip border"
 
-        >
+                >
 
           {/* ... (código do header sem alteração) ... */}
 
@@ -161,13 +161,13 @@ export default function ActiveRound({
 
           {/* Mostra a Letra da Rodada (com augmented-ui) */}
 
-          <div 
+                    <div
 
-            className="text-center bg-bg-secondary p-3 shadow"
+                      className="mt-4 text-center bg-bg-secondary p-3 shadow"
 
-            data-augmented-ui="tl-clip tr-clip br-clip bl-clip border inlay"
+                      data-augmented-ui="tl-clip tr-clip br-clip bl-clip border inlay"
 
-          >
+                    >
 
             {/* ... (código da letra sem alteração) ... */}
 
@@ -183,7 +183,7 @@ export default function ActiveRound({
 
           {/* Linhas de Categoria com Botão Skip */}
 
-          <div className="space-y-3">
+          <div className="mt-4 space-y-3">
 
             {/* ... (código das categorias sem alteração) ... */}
 

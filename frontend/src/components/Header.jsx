@@ -32,6 +32,18 @@ function useUserData() {
     } else {
       setLoading(false);
     }
+
+    const handleUserUpdate = (event) => {
+      if (event.detail) {
+        setUser(event.detail);
+      }
+    };
+
+    window.addEventListener('userUpdated', handleUserUpdate);
+
+    return () => {
+      window.removeEventListener('userUpdated', handleUserUpdate);
+    };
   }, []);
 
   return { user, loading };
@@ -195,7 +207,7 @@ export default function Header({ isMuted, toggleMute }) {
   // se não está logado, não renderiza header
   if (!user) return null;
 
-  const userAvatar = avatarList.find(a => a.id === user?.avatar_id) || avatarList.find(a => a.id === 'default');
+  const userAvatar = avatarList.find(a => a.nome === user?.avatar_nome) || avatarList.find(a => a.nome === 'default');
 
   // Ocultar moedas se estiver na rota /shop ou suas subrotas
   const isOnShopScreen = location.pathname.startsWith('/shop');
