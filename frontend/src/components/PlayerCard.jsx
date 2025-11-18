@@ -49,21 +49,7 @@ const PlayerCard = ({ playerName, isHost, avatarNome, personagemNome, ranking, i
                 )}
             </div>
 
-            {/* Bounty and Chip Status */}
-            <div className={`w-full mt-4 p-4 bg-black/50 border-t-2 ${isPlayer2 ? 'border-secondary' : 'border-warning'} ${textAlign}`}>
-                <div className="flex items-center justify-between">
-                    <span className="text-lg font-semibold">Bounty:</span>
-                    <span className="text-lg font-mono text-accent">¥50,000</span>
-                </div>
-                <div className="flex items-center justify-between mt-2">
-                    <span className="text-lg font-semibold">Pontuação:</span>
-                    <span className="text-lg font-mono text-accent">{ranking || 0}</span>
-                </div>
-                <div className="flex items-center justify-between mt-2">
-                    <span className="text-lg font-semibold">Chip Status:</span>
-                    <span className="text-lg font-mono text-green-400">Optimal</span>
-                </div>
-            </div>
+            {/* No Status Section */}
         </div>
     );
 };
