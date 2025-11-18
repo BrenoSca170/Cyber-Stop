@@ -13,7 +13,7 @@ const avatarList = [
   },
   {
     nome: 'default',
-    url: '/avatars/default.svg'
+    url: '/avatars/default.png'
   }
 ];
 

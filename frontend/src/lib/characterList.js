@@ -6,10 +6,6 @@ const characterList = [
   {
     nome: 'echo',
     url: '/characters/echo.png'
-  },
-  {
-    nome: 'default',
-    url: '/characters/default.png'
   }
 ];
 
