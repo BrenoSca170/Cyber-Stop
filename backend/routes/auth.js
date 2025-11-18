@@ -197,5 +197,47 @@ router.put('/personagem', async (req, res) => {
   }
 });
 
+// ROTA: reset imediato sem email/token
+// POST /auth/instant-reset
+// body: { email, newPassword }
+router.post('/instant-reset', async (req, res) => {
+  try {
+    const { email, newPassword } = req.body;
+    if (!email || !newPassword) return res.status(400).json({ error: 'email e newPassword obrigatórios' });
+    if (typeof newPassword !== 'string' || newPassword.length < 6) return res.status(400).json({ error: 'Senha mínima de 6 caracteres' });
+
+    // buscar jogador pelo email
+    const { data: user, error: userErr } = await supa
+      .from('jogador')
+      .select('jogador_id, nome_de_usuario, email')
+      .eq('email', email)
+      .maybeSingle();
+
+    if (userErr) throw userErr;
+
+    // Segurança: não dizer explicitamente que o email não existe — retorna mensagem genérica
+    if (!user) {
+      console.warn(`instant-reset solicitado para email inexistente: ${email}`);
+      // responder 200 para evitar enumeração de emails
+      return res.json({ message: 'Se existir uma conta com esse email, a senha foi atualizada.' });
+    }
+
+    // atualizar senha imediatamente
+    const senha_hash = await bcrypt.hash(newPassword, 8);
+    const { error: updateErr } = await supa
+      .from('jogador')
+      .update({ senha_hash })
+      .eq('jogador_id', user.jogador_id);
+
+    if (updateErr) throw updateErr;
+
+    // sucesso (resposta genérica)
+    return res.json({ message: 'Se existir uma conta com esse email, a senha foi atualizada.' });
+  } catch (e) {
+    console.error('instant-reset error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 
 export default router;
