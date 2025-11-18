@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { ArrowLeft, Loader2, ShoppingCart, Gem, Package, Info } from 'lucide-react';
+import { toast } from 'sonner';
 // (NOVO) Importa o PaymentModal
 import PaymentModal from '../components/PaymentModal';
 import MatrixRain from '../components/MatrixRain';
@@ -163,9 +164,7 @@ export default function ShopScreen() {
   const handleConfirmPayment = (confirmedAmount) => {
       // Esta função é chamada pelo PaymentModal após a "simulação" de sucesso
       console.log(`Pagamento de ${confirmedAmount} moedas confirmado (Simulação).`);
-      // Em um sistema real, aqui você chamaria a API para confirmar o webhook do pagamento.
-      // O ideal é recarregar o inventário para atualizar o saldo
-      alert(`Pagamento de ${confirmedAmount} moedas confirmado (Simulação). Lembre-se que no mundo real, o backend faria esta confirmação.`);
+      toast.success(`Pagamento confirmado! ${confirmedAmount} moedas foram adicionadas à sua conta.`);
       fetchData(); 
   };
 
@@ -178,12 +177,11 @@ export default function ShopScreen() {
 
     try {
       await api.post('/shop/buy-item', { item_id: itemId });
-      // Sucesso! Atualiza o saldo de moedas
+      toast.success('Item comprado com sucesso!');
       await fetchData(); // Recarrega tudo para simplicidade
-      // alert('Compra realizada com sucesso!');
     } catch (err) {
       console.error('Erro ao comprar item:', err);
-      setError(err.response?.data?.error || 'Saldo de moedas insuficiente ou falha na transação.');
+      toast.error(err.response?.data?.error || 'Saldo insuficiente ou falha na transação.');
     } finally {
       setBuyingId(null);
     }
