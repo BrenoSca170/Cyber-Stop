@@ -12,6 +12,7 @@ import WaitingRoomScreen from './pages/WaitingRoomScreen'
 import Login from './pages/Login'
 import ProfileScreen from './pages/ProfileScreen'
 import RankingScreen from './pages/RankingScreen'
+import IntroScreen from './pages/IntroScreen';
 import './index.css'
 
 function RequireAuth({ children }) {
@@ -24,6 +25,10 @@ const router = createBrowserRouter([
   {
     path: '/login',
     element: <Login />
+  },
+  {
+    path: '/intro',
+    element: <RequireAuth><IntroScreen /></RequireAuth>
   },
   {
     path: '/',

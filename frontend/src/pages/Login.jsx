@@ -24,7 +24,7 @@ export default function Login() {
     const token = localStorage.getItem('token')
     if (token) {
       refreshSocketAuth()
-      nav('/', { replace: true })
+      nav('/intro', { replace: true })
     }
   }, [nav])
 
@@ -44,13 +44,13 @@ export default function Login() {
         localStorage.setItem('token', data.token)
         localStorage.setItem('meuJogadorId', String(data.jogador.jogador_id))
         refreshSocketAuth()
-        nav('/')
+        nav('/intro')
       } else {
         const { data } = await api.post('/auth/register', { email, password, nome_de_usuario: username })
         localStorage.setItem('token', data.token)
         localStorage.setItem('meuJogadorId', String(data.jogador.jogador_id))
         refreshSocketAuth()
-        nav('/')
+        nav('/intro')
       }
     } catch (e) {
       setError(e.response?.data?.error || e.message)
