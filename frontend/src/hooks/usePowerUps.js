@@ -14,8 +14,9 @@ export function usePowerUps(rodadaId, isLocked, salaId) {
     setLoadingInventory(true);
     try {
       const { data } = await api.get('/shop/inventory');
-      setInventario(data?.inventario || []);
-      console.log("Inventário buscado com sucesso:", data?.inventario || []);
+      const filteredInventory = (data?.inventario || []).filter(p => p.quantidade > 0);
+      setInventario(filteredInventory);
+      console.log("Inventário buscado com sucesso:", filteredInventory);
     } catch (error) {
       console.error("Erro detalhado ao buscar inventário:", error.response?.data || error.message || error);
     } finally {

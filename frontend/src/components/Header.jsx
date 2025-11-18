@@ -1,7 +1,7 @@
 // frontend/src/components/Header.jsx
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Gem, User, LogOut } from 'lucide-react';
+import { Gem, User, LogOut, Volume2, VolumeX } from 'lucide-react';
 import avatarList from '../lib/avatarList';
 import api from '../lib/api';
 import socket from '../lib/socket';
@@ -37,7 +37,7 @@ function useUserData() {
   return { user, loading };
 }
 
-export default function Header() {
+export default function Header({ isMuted, toggleMute }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, loading: userLoading } = useUserData();
@@ -170,7 +170,8 @@ export default function Header() {
 
     if (salaId) {
       handleExitClick(() => performLogout());
-    } else {
+    }
+    else {
       performLogout();
     }
   };
@@ -247,6 +248,15 @@ export default function Header() {
               <Link to="/profile" className="text-xs text-text-muted hover:text-primary cursor-target">Ver Perfil</Link>
             </div>
           </div>
+
+          {/* Botão de Volume */}
+          <button
+            onClick={toggleMute}
+            className="bg-primary/20 hover:bg-primary/40 text-white p-2 rounded-lg transition-colors cursor-target"
+            title={isMuted ? 'Ativar Som' : 'Desativar Som'}
+          >
+            {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+          </button>
 
           {/* Botão de Logout */}
           <button
