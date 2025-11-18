@@ -5,7 +5,7 @@ BEGIN
     SELECT
         COUNT(r.ranking_id) AS partidas_jogadas,
         COUNT(r.ranking_id) FILTER (WHERE r.vencedor = true) AS vitorias,
-        SUM(r.pontuacao_total) AS pontuacao_total
+        COALESCE(SUM(r.pontuacao_total), 0) AS pontuacao_total
     FROM
         public.ranking r
     WHERE

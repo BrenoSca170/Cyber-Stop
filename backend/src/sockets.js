@@ -34,34 +34,7 @@ const MOEDAS_PARTICIPACAO = 5; //
 
 let io; //
 
-// ===== Armazenamento em Memória para Power-ups Ativos na Rodada =====
-// Guarda quem ativou a revelação em qual rodada. Formato: Map<salaId, Map<roundId, Set<jogadorId>>>
-const activeRevealRequests = new Map(); //
 
-function addRevealRequest(salaId, roundId, jogadorId) { //
-    if (!activeRevealRequests.has(salaId)) { //
-        activeRevealRequests.set(salaId, new Map()); //
-    }
-    const salaMap = activeRevealRequests.get(salaId); //
-    if (!salaMap.has(roundId)) { //
-        salaMap.set(roundId, new Set()); //
-    }
-    salaMap.get(roundId).add(jogadorId); //
-    console.log(`[REVEAL] Jogador ${jogadorId} ativou revelação para sala ${salaId}, rodada ${roundId}`); //
-}
-
-function getAndClearRevealRequests(salaId, roundId) { //
-    const salaMap = activeRevealRequests.get(salaId); //
-    if (!salaMap || !salaMap.has(roundId)) { //
-        return new Set(); // Nenhum pedido para esta rodada/sala
-    }
-    const requests = salaMap.get(roundId); //
-    salaMap.delete(roundId); // Limpa após obter
-    if (salaMap.size === 0) { //
-        activeRevealRequests.delete(salaId); // Limpa o mapa da sala se vazio
-    }
-    return requests || new Set(); //
-}
 
 // ===== Armazenamento para palavras puladas (SKIP_WORD) =====
 // Formato: Map<salaId, Map<roundId, Set<string>>> onde string = "jogadorId-temaNome"
@@ -284,50 +257,7 @@ export function scheduleRoundCountdown({ salaId, roundId, duration = 20 }) { //
         // Limpa as palavras desconsideradas do oponente após pontuar
         clearDisregardedOpponentWords(salaId, roundId);
 
-        // --- LÓGICA DE REVELAÇÃO (APÓS PONTUAÇÃO) ---
-        const revealRequesters = getAndClearRevealRequests(salaId, roundId); //
-        if (revealRequesters.size > 0) { //
-             const { data: respostasFinais, error: errRespostas } = await supa //
-                .from('participacao_rodada') //
-                .select('jogador_id, tema_nome, resposta') //
-                .eq('rodada_id', roundId); //
 
-             if (errRespostas) { //
-                 console.error("[REVEAL ERRO] Falha ao buscar respostas finais:", errRespostas); //
-             } else { //
-                 const todosJogadoresSala = await getJogadoresDaSala(salaId); //
-
-                 for (const requesterId of revealRequesters) { //
-                     const oponentesIds = todosJogadoresSala.filter(id => id !== requesterId); //
-                     if (oponentesIds.length > 0 && respostasFinais && respostasFinais.length > 0) { //
-                         const oponenteAlvoId = oponentesIds[Math.floor(Math.random() * oponentesIds.length)]; //
-                         const respostasOponente = respostasFinais.filter(r => r.jogador_id === oponenteAlvoId && r.resposta && r.resposta.trim() !== ''); //
-
-                         if (respostasOponente.length > 0) { //
-                             const respostaRevelada = respostasOponente[Math.floor(Math.random() * respostasOponente.length)]; //
-                             const requesterSocketId = await getSocketIdByPlayerId(requesterId); //
-                             if (requesterSocketId) { //
-                                 io.to(requesterSocketId).emit('effect:answer_revealed', { //
-                                     temaNome: respostaRevelada.tema_nome, //
-                                     resposta: respostaRevelada.resposta, //
-                                     oponenteId: oponenteAlvoId //
-                                 });
-                                 console.log(`[REVEAL] Resposta enviada para jogador ${requesterId} (socket ${requesterSocketId})`); //
-                             } else { //
-                                  console.warn(`[REVEAL] Socket não encontrado para jogador ${requesterId}`); //
-                             }
-                         } else { //
-                              console.log(`[REVEAL] Oponente ${oponenteAlvoId} não teve respostas válidas para revelar.`); //
-                               const requesterSocketId = await getSocketIdByPlayerId(requesterId); //
-                                if (requesterSocketId) io.to(requesterSocketId).emit('powerup:info', { message: 'Nenhuma resposta válida do oponente para revelar.'}); //
-                         }
-                     } else { //
-                          console.log(`[REVEAL] Não há oponentes ou respostas para revelar para jogador ${requesterId}.`); //
-                     }
-                 }
-             }
-        }
-        // --- FIM LÓGICA REVELAÇÃO ---
 
         // *** O 'payload' agora contém 'roundDetails' ***
         io.to(salaId).emit('round:end', payload); // Emite o resultado NORMALMENTE
@@ -702,66 +632,7 @@ export function initSockets(httpServer) { //
     clearSkippedWords(salaId, roundId);
     clearDisregardedOpponentWords(salaId, roundId);
 
-    // --- LÓGICA DE REVELAÇÃO (mantida igual) ---
-    const revealRequesters = getAndClearRevealRequests(salaId, roundId);
-    if (revealRequesters.size > 0) {
-      const { data: respostasFinais, error: errRespostas } = await supa
-        .from('participacao_rodada')
-        .select('jogador_id, tema_nome, resposta')
-        .eq('rodada_id', roundId);
 
-      if (errRespostas) {
-        console.error('[REVEAL ERRO] Falha ao buscar respostas finais:', errRespostas);
-      } else {
-        const todosJogadoresSala = await getJogadoresDaSala(salaId);
-
-        for (const requesterId of revealRequesters) {
-          const oponentesIds = todosJogadoresSala.filter(id => id !== requesterId);
-          if (oponentesIds.length > 0 && respostasFinais && respostasFinais.length > 0) {
-            const oponenteAlvoId =
-              oponentesIds[Math.floor(Math.random() * oponentesIds.length)];
-            const respostasOponente = respostasFinais.filter(
-              r =>
-                r.jogador_id === oponenteAlvoId &&
-                r.resposta &&
-                r.resposta.trim() !== ''
-            );
-
-            if (respostasOponente.length > 0) {
-              const respostaRevelada =
-                respostasOponente[Math.floor(Math.random() * respostasOponente.length)];
-              const requesterSocketId = await getSocketIdByPlayerId(requesterId);
-              if (requesterSocketId) {
-                io.to(requesterSocketId).emit('effect:answer_revealed', {
-                  temaNome: respostaRevelada.tema_nome,
-                  resposta: respostaRevelada.resposta,
-                  oponenteId: oponenteAlvoId
-                });
-                console.log(
-                  `[REVEAL] Resposta enviada para jogador ${requesterId} (socket ${requesterSocketId})`
-                );
-              } else {
-                console.warn(`[REVEAL] Socket não encontrado para jogador ${requesterId}`);
-              }
-            } else {
-              console.log(
-                `[REVEAL] Oponente ${oponenteAlvoId} não teve respostas válidas para revelar.`
-              );
-              const requesterSocketId = await getSocketIdByPlayerId(requesterId);
-              if (requesterSocketId)
-                io.to(requesterSocketId).emit('powerup:info', {
-                  message: 'Nenhuma resposta válida do oponente para revelar.'
-                });
-            }
-          } else {
-            console.log(
-              `[REVEAL] Não há oponentes ou respostas para revelar para jogador ${requesterId}.`
-            );
-          }
-        }
-      }
-    }
-    // --- FIM LÓGICA REVELAÇÃO ---
 
     // 4) Depois de pontuar + aplicar efeitos, processa próxima rodada / fim da partida
     await processAfterScoring(payload, 'STOP');
@@ -875,12 +746,43 @@ export function initSockets(httpServer) { //
 
               break;
             case 'SKIP_OWN_CATEGORY':
-                socket.emit('effect:enable_skip', { powerUpId: powerUpId });
+                // Se um tema alvo for fornecido, executa o pulo. Senão, apenas ativa o modo.
+                if (targetTemaNome) {
+                    try {
+                        // Valida se o tema é válido para a rodada
+                        const { data: temasRodada, error: temasError } = await supa
+                            .from('rodada_tema')
+                            .select('tema:tema_id(tema_nome)')
+                            .eq('rodada_id', currentRoundId);
+                        if (temasError) throw temasError;
+
+                        const temasValidos = (temasRodada || []).map(t => t.tema.tema_nome);
+                        if (!temasValidos.includes(targetTemaNome)) {
+                            socket.emit('powerup:error', { message: 'Tema inválido para esta rodada.' });
+                            return;
+                        }
+
+                        // Adiciona a palavra à lista de puladas para pontuação posterior
+                        addSkippedWord(salaId, currentRoundId, usuarioJogadorId, targetTemaNome);
+                        
+                        // Confirma o sucesso para o usuário
+                        socket.emit('powerup:ack', { 
+                            codigo: 'SKIP_OWN_CATEGORY', 
+                            message: `Palavra "${targetTemaNome}" foi pulada! Você ganhará pontos automaticamente.` 
+                        });
+                        
+                        console.log(`[SKIP_OWN_CATEGORY] Jogador ${usuarioJogadorId} pulou palavra ${targetTemaNome} na rodada ${currentRoundId}`);
+
+                    } catch (err) {
+                        console.error('[SKIP_OWN_CATEGORY] Erro ao pular palavra:', err);
+                        socket.emit('powerup:error', { message: 'Erro ao pular palavra.' });
+                    }
+                } else {
+                    // Apenas ativa o modo de pulo no frontend
+                    socket.emit('effect:enable_skip', { powerUpId: powerUpId });
+                }
                 break;
-            case 'REVEAL_OPPONENT_ANSWER':
-                addRevealRequest(salaId, currentRoundId, usuarioJogadorId);
-                socket.emit('powerup:ack', { codigo: efeito, message: 'Revelação de resposta ativada para o final desta rodada.' });
-                break;
+
             case 'BLOCK_OPPONENT_TYPE_5S':
                 try {
                     const todosJogadores = await getJogadoresDaSala(salaId);
@@ -908,70 +810,8 @@ export function initSockets(httpServer) { //
                     socket.emit('powerup:error', { message: 'Erro ao aplicar bloqueio de digitação.' });
                 }
                 break;
-            case 'CLEAR_OPPONENT_ANSWERS':
-                try {
-                    const todosJogadores = await getJogadoresDaSala(salaId);
-                    const oponentesIds = todosJogadores.filter(id => id !== usuarioJogadorId);
 
-                    if (oponentesIds.length === 0) {
-                        socket.emit('powerup:error', { message: 'Não há oponentes na sala para afetar.' });
-                        return;
-                    }
-                    let targetId = targetPlayerId ? Number(targetPlayerId) : oponentesIds[Math.floor(Math.random() * oponentesIds.length)];
-                    if (!oponentesIds.includes(targetId)) {
-                        targetId = oponentesIds[0];
-                    }
-                    
-                    const { error: clearError } = await supa
-                        .from('participacao_rodada')
-                        .update({ resposta: '' })
-                        .eq('rodada_id', currentRoundId)
-                        .eq('jogador_id', targetId);
 
-                    if (clearError) {
-                        console.error('[CLEAR_ANSWERS] Erro ao limpar respostas:', clearError);
-                        socket.emit('powerup:error', { message: 'Erro ao apagar respostas do adversário.' });
-                        return;
-                    }
-
-                    const targetSocketId = await getSocketIdByPlayerId(targetId);
-                    if (targetSocketId) {
-                        io.to(targetSocketId).emit('effect:clear_answers', { attackerId: usuarioJogadorId });
-                        socket.emit('powerup:ack', { codigo: efeito, message: `Campos do adversário foram apagados!` });
-                        console.log(`[CLEAR_ANSWERS] Jogador ${usuarioJogadorId} apagou respostas de ${targetId}`);
-                    } else {
-                        socket.emit('powerup:ack', { codigo: efeito, message: `Campos do adversário foram apagados!` });
-                        console.log(`[CLEAR_ANSWERS] Respostas de ${targetId} apagadas (jogador offline)`);
-                    }
-                } catch (err) {
-                    console.error('[CLEAR_ANSWERS] Erro:', err);
-                    socket.emit('powerup:error', { message: 'Erro ao apagar campos do adversário.' });
-                }
-                break;
-            case 'SKIP_WORD':
-                try {
-                    if (!targetTemaNome) {
-                        socket.emit('powerup:error', { message: 'É necessário especificar qual palavra pular.' });
-                        return;
-                    }
-                    const { data: temasRodada, error: temasError } = await supa
-                        .from('rodada_tema')
-                        .select('tema:tema_id(tema_nome)')
-                        .eq('rodada_id', currentRoundId);
-                    if (temasError) throw temasError;
-                    const temasValidos = (temasRodada || []).map(t => t.tema.tema_nome);
-                    if (!temasValidos.includes(targetTemaNome)) {
-                        socket.emit('powerup:error', { message: 'Tema inválido para esta rodada.' });
-                        return;
-                    }
-                    addSkippedWord(salaId, currentRoundId, usuarioJogadorId, targetTemaNome);
-                    socket.emit('powerup:ack', { codigo: efeito, message: `Palavra "${targetTemaNome}" foi pulada! Você ganhará pontos automaticamente.` });
-                    console.log(`[SKIP_WORD] Jogador ${usuarioJogadorId} pulou palavra ${targetTemaNome} na rodada ${currentRoundId}`);
-                } catch (err) {
-                    console.error('[SKIP_WORD] Erro:', err);
-                    socket.emit('powerup:error', { message: 'Erro ao pular palavra.' });
-                }
-                break;
             case 'DISREGARD_OPPONENT_WORD':
             case 'SKIP_OPPONENT_CATEGORY':
                 try {

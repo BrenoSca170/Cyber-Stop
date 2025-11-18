@@ -30,13 +30,10 @@ export async function saveRanking({ salaId, totais, winnerInfo }) {
       })
     }
 
-    // Usa upsert para evitar duplicatas (já tem UNIQUE constraint)
+    // Usa insert para garantir que cada partida seja um novo registro
     const { error } = await supa
       .from('ranking')
-      .upsert(records, {
-        onConflict: 'jogador_id,sala_id',
-        ignoreDuplicates: false
-      })
+      .insert(records)
 
     if (error) {
       console.error(`[saveRanking] Erro ao salvar ranking para sala ${salaId}:`, error)

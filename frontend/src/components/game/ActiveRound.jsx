@@ -29,101 +29,193 @@ export default function ActiveRound({
   const { answers, updateAnswer, onStop, skippedCategories, disregardedCategories, handleSkipCategory } = inputState;
   const { inventario, loadingInventory, handleUsePowerUp } = powerUpState;
 
-  const onSkip = (temaId) => {
-    if (!activeSkipPowerUpId || isLocked) return;
-    handleSkipCategory(temaId);
-    setActiveSkipPowerUpId(null); 
-  }
+    const onSkip = (tema) => {
+
+      if (!activeSkipPowerUpId || isLocked) return;
+
   
-  const onSkipOpponent = (temaNome) => {
-    if (!activeSkipOpponentPowerUpId || isLocked) return;
-    if (onSkipOpponentCategory) {
-      onSkipOpponentCategory(temaNome);
-    }
-    setActiveSkipOpponentPowerUpId(null); 
-  };
 
-  // Esta função é mantida, pois é ela que chamamos ao clicar no botão
-  const onUsePowerUp = (powerUp) => {
-    if (powerUp.code === 'SKIP_OWN_CATEGORY' && activeSkipPowerUpId) {
-      alert("Pular Categoria já está ativo!"); return;
-    }
-    if ((powerUp.code === 'DISREGARD_OPPONENT_WORD' || powerUp.code === 'SKIP_OPPONENT_CATEGORY') && activeSkipOpponentPowerUpId) {
-      alert("Desconsiderar Categoria do Oponente já está ativo!"); return;
-    }
-    if (powerUp.code === 'REVEAL_OPPONENT_ANSWER' && revealPending) {
-      alert("Você já ativou a revelação para esta rodada."); return;
-    }
-    if (powerUp.code === 'SKIP_WORD') {
-      const temasList = temas.map(t => t.nome).join(', ');
-      const escolha = window.prompt(`Qual palavra você deseja pular?\n\nTemas disponíveis: ${temasList}`);
-      if (!escolha) return; 
-      
-      const temaEscolhido = temas.find(t => t.nome.toLowerCase().trim() === escolha.toLowerCase().trim());
-      if (!temaEscolhido) {
-        alert(`Tema "${escolha}" não encontrado nesta rodada.`);
-        return;
+      // Encontra o power-up original no inventário para obter todos os seus dados
+
+      const powerUpToUse = inventario.find(p => p.power_up_id === activeSkipPowerUpId);
+
+  
+
+      if (powerUpToUse) {
+
+        // Chama o backend para EXECUTAR o pulo na categoria específica
+
+        handleUsePowerUp(powerUpToUse, tema.nome);
+
+      } else {
+
+        // Fallback ou erro, caso o power-up não seja encontrado no inventário
+
+        alert("Erro: Power-up de Pulo não encontrado no inventário.");
+
       }
+
       
-      handleUsePowerUp(powerUp, temaEscolhido.nome);
-      return;
+
+      // Atualiza o estado local da UI imediatamente
+
+      handleSkipCategory(tema.id);
+
+      setActiveSkipPowerUpId(null); 
+
     }
-    handleUsePowerUp(powerUp);
-  }
 
-  return (
-    // Aplicada fonte cyber e perspectiva
-    <div className="max-w-3xl mx-auto text-white space-y-4 p-4 relative font-cyber [perspective:1000px]">
-      
-      
-      {/* Cabeçalho com Timer e ID (com augmented-ui) */}
-      <header 
-        className="flex items-center justify-between bg-bg-secondary p-3 shadow sticky top-[72px] z-10"
-        data-augmented-ui="tl-clip tr-clip br-clip bl-clip border"
-      >
-        {/* ... (código do header sem alteração) ... */}
-        <div className="text-sm">
-            Nó <b className="font-mono text-secondary">#{salaId}</b> | ID: <b className="font-mono text-accent">{meuJogadorId}</b>
-        </div>
-        <div className={`font-mono text-2xl font-bold tabular-nums ${timeLeft !== null && timeLeft <= 10 ? 'text-primary animate-pulse' : 'text-warning'}`}>
-           ⏱ {timeLeft !== null ? `${String(Math.floor(timeLeft / 60)).padStart(2, '0')}:${String(timeLeft % 60).padStart(2, '0')}` : '--:--'}
-        </div>
-      </header>
+    
 
-      <>
-        {/* Mostra a Letra da Rodada (com augmented-ui) */}
-        <div 
-          className="text-center bg-bg-secondary p-3 shadow"
-          data-augmented-ui="tl-clip tr-clip br-clip bl-clip border inlay"
+    const onSkipOpponent = (temaNome) => {
+
+      if (!activeSkipOpponentPowerUpId || isLocked) return;
+
+      if (onSkipOpponentCategory) {
+
+        onSkipOpponentCategory(temaNome);
+
+      }
+
+      setActiveSkipOpponentPowerUpId(null); 
+
+    };
+
+  
+
+    // Esta função é mantida, pois é ela que chamamos ao clicar no botão
+
+    const onUsePowerUp = (powerUp) => {
+
+      if (powerUp.code === 'SKIP_OWN_CATEGORY' && activeSkipPowerUpId) {
+
+        alert("Pular Categoria já está ativo!"); return;
+
+      }
+
+      if ((powerUp.code === 'DISREGARD_OPPONENT_WORD' || powerUp.code === 'SKIP_OPPONENT_CATEGORY') && activeSkipOpponentPowerUpId) {
+
+        alert("Desconsiderar Categoria do Oponente já está ativo!"); return;
+
+      }
+
+      if (powerUp.code === 'REVEAL_OPPONENT_ANSWER' && revealPending) {
+
+        alert("Você já ativou a revelação para esta rodada."); return;
+
+      }
+
+      handleUsePowerUp(powerUp);
+
+    }
+
+  
+
+    return (
+
+      // Aplicada fonte cyber e perspectiva
+
+      <div className="max-w-3xl mx-auto text-white space-y-4 p-4 relative font-cyber [perspective:1000px]">
+
+        
+
+        
+
+        {/* Cabeçalho com Timer e ID (com augmented-ui) */}
+
+        <header 
+
+          className="flex items-center justify-between bg-bg-secondary p-3 shadow sticky top-[72px] z-10"
+
+          data-augmented-ui="tl-clip tr-clip br-clip bl-clip border"
+
         >
-          {/* ... (código da letra sem alteração) ... */}
-          <h2 className="text-2xl font-semibold text-text-header">
-            Letra da Rodada: <span className="font-mono text-4xl text-accent ml-2">{letra || '?'}</span>
-          </h2>
-        </div>
 
-        {/* Linhas de Categoria com Botão Skip */}
-        <div className="space-y-3">
-          {/* ... (código das categorias sem alteração) ... */}
-          {(temas || []).map(t => {
-            const isSkipped = skippedCategories.has(t.id);
-            const isDisregarded = disregardedCategories.has(t.id);
-            return (
-              <div key={t.id} className="flex items-center gap-2">
-                 <CategoryRow
-                    categoryName={t.nome}
-                    value={isSkipped ? '--- PULADO ---' : (isDisregarded ? '--- DESCONSIDERADA ---' : (answers[t.id] || ''))}
-                    onChange={e => updateAnswer(t.id, e.target.value)}
-                    isDisabled={isLocked || timeLeft === 0 || isSkipped || isDisregarded}
-                    inputClassName={isSkipped ? 'text-text-muted/70 italic bg-bg-input/50' : (isDisregarded ? 'text-red-400/70 italic bg-red-900/30' : '')}
-                  />
-                  {activeSkipPowerUpId && !isSkipped && (
-                       <button
-                          onClick={() => onSkip(t.id)}
-                          disabled={isLocked || timeLeft === 0}
-                          className="bg-warning hover:bg-warning/80 text-black p-2 rounded-lg disabled:opacity-50 transition-transform hover:scale-110"
-                          title="Pular esta categoria (usará o power-up)"
-                        >
+          {/* ... (código do header sem alteração) ... */}
+
+          <div className="text-sm">
+
+              Nó <b className="font-mono text-secondary">#{salaId}</b> | ID: <b className="font-mono text-accent">{meuJogadorId}</b>
+
+          </div>
+
+          <div className={`font-mono text-2xl font-bold tabular-nums ${timeLeft !== null && timeLeft <= 10 ? 'text-primary animate-pulse' : 'text-warning'}`}>
+
+             ⏱ {timeLeft !== null ? `${String(Math.floor(timeLeft / 60)).padStart(2, '0')}:${String(timeLeft % 60).padStart(2, '0')}` : '--:--'}
+
+          </div>
+
+        </header>
+
+  
+
+        <>
+
+          {/* Mostra a Letra da Rodada (com augmented-ui) */}
+
+          <div 
+
+            className="text-center bg-bg-secondary p-3 shadow"
+
+            data-augmented-ui="tl-clip tr-clip br-clip bl-clip border inlay"
+
+          >
+
+            {/* ... (código da letra sem alteração) ... */}
+
+            <h2 className="text-2xl font-semibold text-text-header">
+
+              Letra da Rodada: <span className="font-mono text-4xl text-accent ml-2">{letra || '?'}</span>
+
+            </h2>
+
+          </div>
+
+  
+
+          {/* Linhas de Categoria com Botão Skip */}
+
+          <div className="space-y-3">
+
+            {/* ... (código das categorias sem alteração) ... */}
+
+            {(temas || []).map(t => {
+
+              const isSkipped = skippedCategories.has(t.id);
+
+              const isDisregarded = disregardedCategories.has(t.id);
+
+              return (
+
+                <div key={t.id} className="flex items-center gap-2">
+
+                   <CategoryRow
+
+                      categoryName={t.nome}
+
+                      value={isSkipped ? '--- PULADO ---' : (isDisregarded ? '--- DESCONSIDERADA ---' : (answers[t.id] || ''))}
+
+                      onChange={e => updateAnswer(t.id, e.target.value)}
+
+                      isDisabled={isLocked || timeLeft === 0 || isSkipped || isDisregarded}
+
+                      inputClassName={isSkipped ? 'text-text-muted/70 italic bg-bg-input/50' : (isDisregarded ? 'text-red-400/70 italic bg-red-900/30' : '')}
+
+                    />
+
+                    {activeSkipPowerUpId && !isSkipped && (
+
+                         <button
+
+                            onClick={() => onSkip(t)}
+
+                            disabled={isLocked || timeLeft === 0}
+
+                            className="bg-warning hover:bg-warning/80 text-black p-2 rounded-lg disabled:opacity-50 transition-transform hover:scale-110"
+
+                            title="Pular esta categoria (usará o power-up)"
+
+                          >
                            <SkipForward size={20}/>
                        </button>
                   )}

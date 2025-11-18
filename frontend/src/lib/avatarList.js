@@ -13,7 +13,7 @@ const avatarList = [
   },
   {
     nome: 'default',
-    url: null // Ou um caminho para uma imagem de avatar padrão
+    url: '/avatars/default.svg'
   }
 ];
 
